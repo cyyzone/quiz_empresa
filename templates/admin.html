@@ -148,7 +148,7 @@
                 <input type="number" name="tempo_limite" value="30" min="5" style="width: 100px;" required><br><br>
                 <button type="submit" class="btn">Salvar Pergunta</button>
             </form>
-            <div class="ranking-container" style="max-width: 900px; margin: auto;">
+            <div class="ranking-container" style="max-width: 900px; margin: 40px auto;">
                 <h3>Perguntas Cadastradas</h3>
                 <table>
                     <thead>
@@ -222,34 +222,40 @@
             const activeAccordionId = sessionStorage.getItem('activeAccordionId');
 
             accordions.forEach(accordion => {
-                accordion.addEventListener("click", function() {
-                    const panel = this.nextElementSibling;
-                    const isAlreadyActive = this.classList.contains("active");
+                // Função para abrir um painel específico
+                function openPanel(acc) {
+                    acc.classList.add("active");
+                    const panel = acc.nextElementSibling;
+                    panel.style.maxHeight = panel.scrollHeight + "px";
+                    sessionStorage.setItem('activeAccordionId', acc.id);
+                }
 
-                    // Fecha todos os outros painéis
-                    accordions.forEach(other_accordion => {
-                        if (other_accordion !== this) {
-                            other_accordion.classList.remove("active");
-                            other_accordion.nextElementSibling.style.maxHeight = null;
-                        }
+                // Função para fechar todos os painéis
+                function closeAllPanels() {
+                    accordions.forEach(acc => {
+                        acc.classList.remove("active");
+                        acc.nextElementSibling.style.maxHeight = null;
                     });
+                    sessionStorage.removeItem('activeAccordionId');
+                }
 
-                    // Se o painel clicado não estava ativo, abre ele
+                accordion.addEventListener("click", function() {
+                    const isAlreadyActive = this.classList.contains("active");
+                    
+                    // Primeiro, sempre fecha tudo
+                    closeAllPanels();
+
+                    // Se não estava ativo, então abre o painel clicado
                     if (!isAlreadyActive) {
-                        this.classList.add("active");
-                        panel.style.maxHeight = panel.scrollHeight + "px";
-                        sessionStorage.setItem('activeAccordionId', this.id);
-                    } else {
-                        sessionStorage.removeItem('activeAccordionId');
+                        openPanel(this);
                     }
                 });
 
                 // Verifica se este é o acordeão que estava aberto antes de recarregar a página
                 if (activeAccordionId && accordion.id === activeAccordionId) {
-                    accordion.classList.add("active");
-                    const panel = accordion.nextElementSibling;
+                    // Usamos um pequeno delay para garantir que a renderização da página não interfira no cálculo da altura
                     setTimeout(() => {
-                        panel.style.maxHeight = panel.scrollHeight + "px";
+                        openPanel(accordion);
                     }, 100);
                 }
             });
