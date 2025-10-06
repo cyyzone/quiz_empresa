@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios de Erros{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1>Relatórios e Análises</h1>
+
+    <h2>Percentual de Erros por Pergunta</h2>
+    <div class="ranking-container" style="max-width: 900px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pergunta</th>
+                    <th>Total de Respostas</th>
+                    <th>Respostas Incorretas</th>
+                    <th>Percentual de Erro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in stats_perguntas %}
+                <tr>
+                    <td style="white-space: normal;">{{ stat.texto }}</td>
+                    <td>{{ stat.total }}</td>
+                    <td>{{ stat.erros }}</td>
+                    <td>
+                        <strong style="color: {% if stat.percentual > 50 %}#dc3545{% elif stat.percentual > 25 %}#ffc107{% else %}#28a745{% endif %};">
+                            {{ "%.1f"|format(stat.percentual) }}%
+                        </strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Nenhum dado de resposta para analisar.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <hr style="margin: 40px 0;">
+
+    <h2>Análise de Erros por Setor e Membro</h2>
+    <div class="ranking-container" style="max-width: 900px; text-align: left;">
+        {% for setor, usuarios in erros_por_setor.items() %}
+            <h2 style="background-color: var(--cor-primaria); color: white; padding: 10px; border-radius: 8px;">Setor: {{ setor }}</h2>
+            {% for usuario, erros in usuarios.items() %}
+                <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 25px;">Membro: {{ usuario }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pergunta (Liberada em)</th>
+                            <th>Sua Resposta</th>
+                            <th>Resposta Correta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for erro in erros %}
+                        <tr>
+                            <td style="white-space: normal;">{{ erro.pergunta_texto }} ({{ erro.data_liberacao }})</td>
+                            <td style="background-color: #f8d7da;"><b>{{ erro.resposta_dada.upper() }})</b> {{ erro.texto_resposta_dada }}</td>
+                            <td style="background-color: #d4edda;"><b>{{ erro.resposta_correta.upper() }})</b> {{ erro.texto_resposta_correta }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endfor %}
+        {% else %}
+            <p>Nenhuma resposta incorreta registrada!</p>
+        {% endfor %}
+    </div>
+
+    <p style="margin-top: 20px;"><a href="{{ url_for('pagina_admin') }}">Voltar para o Admin</a></p>
+
+</div>
+{% endblock %}

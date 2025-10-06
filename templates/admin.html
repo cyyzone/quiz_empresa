@@ -1,0 +1,258 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<div class="dashboard-container" style="max-width: 1100px;">
+    <h1>Área do Administrador</h1>
+
+    {% if not senha_correta %}
+    <form method="post">
+        <p>Digite a senha de administrador para continuar:</p>
+        <input type="password" name="senha" autofocus autocomplete="new-password">
+        <button type="submit">Entrar</button>
+    </form>
+    {% else %}
+    
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary">Ver Relatórios de Erros</a>
+        <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do Admin</a>
+    </div>
+
+    <button class="accordion-trigger" id="accordion-setores">Gerenciar Setores</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Adicionar Novo Setor</h3>
+                    <form action="{{ url_for('adicionar_setor') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label for="nome">Nome do Setor:</label><br>
+                        <input type="text" name="nome" style="width: 100%;" required><br><br>
+                        <button type="submit" class="btn">Salvar Setor</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 400px;">
+                    <h3>Setores Cadastrados</h3>
+                    <div class="ranking-container" style="max-height: 250px; overflow-y: auto;">
+                        <table>
+                            <thead><tr><th>Nome</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                {% for depto in departamentos %}
+                                <tr>
+                                    <td>{{ depto.nome }}</td>
+                                    <td>
+                                        <form action="{{ url_for('excluir_setor', departamento_id=depto.id) }}" method="post" onsubmit="return confirm('Atenção: Só é possível excluir um setor que não tenha NENHUM usuário. Deseja tentar?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="accordion-trigger" id="accordion-usuarios">Gerenciar Usuários</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Adicionar Novo Usuário</h3>
+                    <form action="{{ url_for('adicionar_usuario') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label for="nome">Nome do Colaborador:</label><br>
+                        <input type="text" name="nome" style="width: 100%;" required><br><br>
+                        <label for="email">E-mail:</label><br>
+                        <input type="email" name="email" style="width: 100%;" required><br><br>
+                        <label for="codigo_acesso">Código de Acesso (4 dígitos):</label><br>
+                        <input type="text" name="codigo_acesso" maxlength="4" style="width: 100%;" required><br><br>
+                        <label for="departamento_id">Setor:</label><br>
+                        <select name="departamento_id" style="width: 100%;" required>
+                            {% for depto in departamentos %}
+                            <option value="{{ depto.id }}">{{ depto.nome }}</option>
+                            {% endfor %}
+                        </select><br><br>
+                        <button type="submit" class="btn">Salvar Usuário</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 500px;">
+                    <h3>Usuários Cadastrados</h3>
+                    <div class="ranking-container" style="max-height: 400px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th>Setor</th>
+                                    <th style="text-align: center;">Código</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for usuario in usuarios %}
+                                <tr>
+                                    <td>{{ usuario.nome }}</td>
+                                    <td>{{ usuario.email }}</td>
+                                    <td>{{ usuario.departamento.nome }}</td>
+                                    <td style="text-align: center; font-weight: bold;">{{ usuario.codigo_acesso }}</td>
+                                    <td style="display: flex; gap: 5px;">
+                                        <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
+                                        <form action="{{ url_for('excluir_usuario', usuario_id=usuario.id) }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir {{ usuario.nome }}?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <button class="accordion-trigger" id="accordion-perguntas">Gerenciar Perguntas</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <form action="{{ url_for('adicionar_pergunta') }}" method="post" style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                <h3>Cadastrar Nova Pergunta</h3>
+                <label for="tipo">Tipo de Pergunta:</label><br>
+                <select id="tipo-pergunta" name="tipo" required onchange="toggleQuestionFields()">
+                    <option value="multipla_escolha" selected>Múltipla Escolha</option>
+                    <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
+                </select><br><br>
+                <label for="texto">Texto da Pergunta:</label><br>
+                <textarea name="texto" rows="3" style="width: 100%;" required></textarea><br><br>
+                <div id="campos-multipla-escolha">
+                    <label for="opcao_a">Opção A:</label><br>
+                    <input type="text" name="opcao_a" style="width: 100%;"><br><br>
+                    <label for="opcao_b">Opção B:</label><br>
+                    <input type="text" name="opcao_b" style="width: 100%;"><br><br>
+                    <label for="opcao_c">Opção C:</label><br>
+                    <input type="text" name="opcao_c" style="width: 100%;"><br><br>
+                    <label for="opcao_d">Opção D:</label><br>
+                    <input type="text" name="opcao_d" style="width: 100%;"><br><br>
+                </div>
+                <label for="resposta_correta">Resposta Correta:</label><br>
+                <select id="resposta-multipla-escolha" name="resposta_correta">
+                    <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
+                </select>
+                <select id="resposta-vf" name="resposta_correta_vf" style="display: none;">
+                    <option value="v">Verdadeiro</option><option value="f">Falso</option>
+                </select><br><br>
+                <label for="data_liberacao">Data de Liberação:</label><br>
+                <input type="date" name="data_liberacao" required><br><br>
+                <label for="tempo_limite">Tempo em Segundos:</label><br>
+                <input type="number" name="tempo_limite" value="30" min="5" style="width: 100px;" required><br><br>
+                <button type="submit" class="btn">Salvar Pergunta</button>
+            </form>
+            <div class="ranking-container" style="max-width: 900px; margin: auto;">
+                <h3>Perguntas Cadastradas</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data Lib.</th>
+                            <th>Pergunta</th>
+                            <th>Resposta</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pergunta in perguntas %}
+                        <tr>
+                            <td>{{ pergunta.data_liberacao.strftime('%d/%m/%Y') }}</td>
+                            <td style="white-space: normal;">{{ pergunta.texto }}</td>
+                            <td><b>{{ pergunta.resposta_correta.upper() }})</b> 
+                                {% if pergunta.tipo == 'multipla_escolha' %}
+                                    {{ get_texto_da_opcao(pergunta, pergunta.resposta_correta) }}
+                                {% else %}
+                                    {{ "Verdadeiro" if pergunta.resposta_correta == 'v' else "Falso" }}
+                                {% endif %}
+                            </td>
+                            <td style="display: flex; gap: 5px;">
+                                <a href="{{ url_for('editar_pergunta', pergunta_id=pergunta.id) }}" style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
+                                <form action="{{ url_for('excluir_pergunta', pergunta_id=pergunta.id) }}" method="post" onsubmit="return confirm('Tem certeza?');">
+                                    <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4">Nenhuma pergunta cadastrada.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    function toggleQuestionFields() {
+        const tipo = document.getElementById('tipo-pergunta').value;
+        const camposMultipla = document.getElementById('campos-multipla-escolha');
+        const respostaMultipla = document.getElementById('resposta-multipla-escolha');
+        const respostaVf = document.getElementById('resposta-vf');
+
+        if (tipo === 'multipla_escolha') {
+            camposMultipla.style.display = 'block';
+            respostaMultipla.style.display = 'block';
+            respostaMultipla.name = 'resposta_correta';
+            respostaVf.style.display = 'none';
+            respostaVf.name = 'resposta_correta_vf';
+        } else { // verdadeiro_falso
+            camposMultipla.style.display = 'none';
+            respostaMultipla.style.display = 'none';
+            respostaMultipla.name = 'resposta_correta_me';
+            respostaVf.style.display = 'block';
+            respostaVf.name = 'resposta_correta';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', toggleQuestionFields);
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const accordions = document.querySelectorAll(".accordion-trigger");
+            const activeAccordionId = sessionStorage.getItem('activeAccordionId');
+
+            accordions.forEach(accordion => {
+                accordion.addEventListener("click", function() {
+                    const panel = this.nextElementSibling;
+                    const isAlreadyActive = this.classList.contains("active");
+
+                    // Fecha todos os outros painéis
+                    accordions.forEach(other_accordion => {
+                        if (other_accordion !== this) {
+                            other_accordion.classList.remove("active");
+                            other_accordion.nextElementSibling.style.maxHeight = null;
+                        }
+                    });
+
+                    // Se o painel clicado não estava ativo, abre ele
+                    if (!isAlreadyActive) {
+                        this.classList.add("active");
+                        panel.style.maxHeight = panel.scrollHeight + "px";
+                        sessionStorage.setItem('activeAccordionId', this.id);
+                    } else {
+                        sessionStorage.removeItem('activeAccordionId');
+                    }
+                });
+
+                // Verifica se este é o acordeão que estava aberto antes de recarregar a página
+                if (activeAccordionId && accordion.id === activeAccordionId) {
+                    accordion.classList.add("active");
+                    const panel = accordion.nextElementSibling;
+                    setTimeout(() => {
+                        panel.style.maxHeight = panel.scrollHeight + "px";
+                    }, 100);
+                }
+            });
+        });
+    </script>
+{% endblock %}

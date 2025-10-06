@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Revisão de Erros{% endblock %}
+
+{% block content %}
+<div class="dashboard-container" style="max-width: 900px; text-align: left;">
+    <h1 style="text-align: center;">📋 Meus Erros para Revisão 📋</h1>
+    <p style="text-align: center;">Aqui estão as perguntas que você errou. Use esta página para aprender e reforçar seu conhecimento!</p>
+
+    <hr style="margin: 30px 0;">
+
+    {% for erro in erros %}
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <p class="question" style="font-size: 20px; text-align: left; margin-bottom: 20px;"><b>Pergunta:</b> {{ erro.pergunta_texto }}</p>
+            
+            <p style="margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #f8d7da; border-left: 5px solid #dc3545;">
+                <b>Sua resposta:</b> ({{ erro.sua_resposta_letra.upper() }}) {{ erro.sua_resposta_texto }}
+            </p>
+            <p style="margin: 10px 0; padding: 10px; border-radius: 5px; background-color: #d4edda; border-left: 5px solid #28a745;">
+                <b>Resposta correta:</b> ({{ erro.resposta_correta_letra.upper() }}) {{ erro.resposta_correta_texto }}
+            </p>
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 40px; background-color: #d4edda; border-radius: 8px;">
+            <h2 style="color: #155724;">Parabéns!</h2>
+            <p>Você ainda não errou nenhuma pergunta. Continue assim!</p>
+        </div>
+    {% endfor %}
+
+    <div style="text-align: center; margin-top: 30px;">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+    </div>
+</div>
+{% endblock %}

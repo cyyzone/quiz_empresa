@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1 class="welcome-message">Bem-vindo(a), {{ nome }}!</h1>
+    <p>O que você gostaria de fazer?</p>
+
+<div class="actions">
+    <a href="{{ url_for('pagina_quiz') }}" class="btn">🚀 Começar Quiz 🚀</a>
+    <a href="{{ url_for('pagina_ranking') }}" class="btn btn-secondary">🏆 Ver Ranking 🏆</a>
+    <a href="{{ url_for('meus_erros') }}" class="btn btn-secondary" style="background-color: #ffc107; color: #333;">📋 Revisar Meus Erros 📋</a>
+</div>
+
+    <a href="{{ url_for('logout') }}" class="logout-link">Sair</a>
+</div>
+{% endblock %}

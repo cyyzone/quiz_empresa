@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Pergunta{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1>Editar Pergunta</h1>
+
+    <form method="post" style="text-align: left; max-width: 600px; margin: auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+        
+        <label for="tipo">Tipo de Pergunta:</label><br>
+        <select id="tipo-pergunta" name="tipo" required onchange="toggleQuestionFields()">
+            <option value="multipla_escolha" {% if pergunta.tipo == 'multipla_escolha' %}selected{% endif %}>Múltipla Escolha</option>
+            <option value="verdadeiro_falso" {% if pergunta.tipo == 'verdadeiro_falso' %}selected{% endif %}>Verdadeiro ou Falso</option>
+        </select><br><br>
+
+        <label for="texto">Texto da Pergunta:</label><br>
+        <textarea name="texto" rows="3" style="width: 100%;" required>{{ pergunta.texto }}</textarea><br><br>
+
+        <div id="campos-multipla-escolha">
+            <label for="opcao_a">Opção A:</label><br>
+            <input type="text" name="opcao_a" style="width: 100%;" value="{{ pergunta.opcao_a or '' }}"><br><br>
+            <label for="opcao_b">Opção B:</label><br>
+            <input type="text" name="opcao_b" style="width: 100%;" value="{{ pergunta.opcao_b or '' }}"><br><br>
+            <label for="opcao_c">Opção C:</label><br>
+            <input type="text" name="opcao_c" style="width: 100%;" value="{{ pergunta.opcao_c or '' }}"><br><br>
+            <label for="opcao_d">Opção D:</label><br>
+            <input type="text" name="opcao_d" style="width: 100%;" value="{{ pergunta.opcao_d or '' }}"><br><br>
+        </div>
+
+        <label for="resposta_correta">Resposta Correta:</label><br>
+        <select id="resposta-multipla-escolha" name="resposta_correta">
+            <option value="a" {% if pergunta.resposta_correta == 'a' %}selected{% endif %}>A</option>
+            <option value="b" {% if pergunta.resposta_correta == 'b' %}selected{% endif %}>B</option>
+            <option value="c" {% if pergunta.resposta_correta == 'c' %}selected{% endif %}>C</option>
+            <option value="d" {% if pergunta.resposta_correta == 'd' %}selected{% endif %}>D</option>
+        </select>
+        <select id="resposta-vf" name="resposta_correta_vf" style="display: none;">
+            <option value="v" {% if pergunta.resposta_correta == 'v' %}selected{% endif %}>Verdadeiro</option>
+            <option value="f" {% if pergunta.resposta_correta == 'f' %}selected{% endif %}>Falso</option>
+        </select><br><br>
+
+        <label for="data_liberacao">Data de Liberação:</label><br>
+        <input type="date" name="data_liberacao" value="{{ pergunta.data_liberacao.strftime('%Y-%m-%d') }}" required><br><br>
+
+
+         <label for="tempo_limite">Tempo em Segundos:</label><br>
+        <input type="number" name="tempo_limite" value="{{ pergunta.tempo_limite }}" min="5" style="width: 100px;" required><br><br>
+        <button type="submit" class="btn">Salvar Alterações</button>
+        <a href="{{ url_for('pagina_admin') }}" style="margin-left: 10px;">Cancelar</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    function toggleQuestionFields() {
+        // (O mesmo script do admin.html)
+        const tipo = document.getElementById('tipo-pergunta').value;
+        const camposMultipla = document.getElementById('campos-multipla-escolha');
+        const respostaMultipla = document.getElementById('resposta-multipla-escolha');
+        const respostaVf = document.getElementById('resposta-vf');
+
+        if (tipo === 'multipla_escolha') {
+            camposMultipla.style.display = 'block';
+            respostaMultipla.style.display = 'block';
+            respostaMultipla.name = 'resposta_correta';
+            respostaVf.style.display = 'none';
+            respostaVf.name = 'resposta_correta_vf';
+        } else {
+            camposMultipla.style.display = 'none';
+            respostaMultipla.style.display = 'none';
+            respostaMultipla.name = 'resposta_correta_me';
+            respostaVf.style.display = 'block';
+            respostaVf.name = 'resposta_correta';
+        }
+    }
+    // Garante que o estado inicial esteja correto ao carregar a página
+    document.addEventListener('DOMContentLoaded', toggleQuestionFields);
+    </script>
+{% endblock %}
