@@ -489,11 +489,18 @@ def upload_csv():
         session['has_valid_rows'] = has_valid_rows
         
         return redirect(url_for('preview_csv'))
-        except Exception as e:
-        app.logger.error(f"Erro ao ler o arquivo CSV: {e}")
-        flash(f"Ocorreu um erro ao processar o arquivo CSV: {e}", "danger")
+        
+    except csv.Error as e:
+        # Trata erros específicos de CSV, como "Não foi possível adivinhar o delimitador"
+        app.logger.error(f"Erro ao processar CSV (Sniffer/Reader): {e}")
+        flash(f"Erro ao ler o arquivo CSV. O delimitador não pôde ser identificado. Certifique-se de usar vírgula (,) ou ponto e vírgula (;).", "danger")
         return redirect(url_for('pagina_admin'))
-
+        
+    except Exception as e:
+        app.logger.error(f"Erro geral ao ler o arquivo CSV: {e}")
+        flash(f"Ocorreu um erro inesperado ao processar o arquivo CSV: {e}", "danger")
+        return redirect(url_for('pagina_admin'))
+    
 @app.route('/admin/preview_csv')
 def preview_csv():
     if not session.get('admin_logged_in'):
