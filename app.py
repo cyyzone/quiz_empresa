@@ -448,10 +448,15 @@ def upload_csv():
 
 @app.route('/admin/preview_csv')
 def preview_csv():
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('pagina_admin'))
+
+    # MUDANÇA: Recupera a ordem dos cabeçalhos da sessão, além dos outros dados
     validated_data = session.get('csv_data', [])
     has_valid_rows = session.get('has_valid_rows', False)
-    return render_template('preview_csv.html', data=validated_data, has_valid_rows=has_valid_rows)
+    headers = session.get('csv_headers', [])
+    
+    return render_template('preview_csv.html', data=validated_data, has_valid_rows=has_valid_rows, headers=headers)
 
 @app.route('/admin/process_import', methods=['POST'])
 def processar_importacao():
