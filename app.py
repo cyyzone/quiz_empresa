@@ -7,6 +7,7 @@ from flask_mail import Mail, Message
 import os
 from threading import Thread
 
+
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
