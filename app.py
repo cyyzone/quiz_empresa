@@ -21,7 +21,7 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'seu-email-verificado@exemplo.com'))
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'jenycds@hotmail.com'))
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
