@@ -5,16 +5,13 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 import os
 from threading import Thread
-# MUDANÇA: Novas importações para a API do SendGrid
 import sendgrid
 from sendgrid.helpers.mail import Mail
-
 
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
 app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-dificil'
-# A URL do banco de dados agora é lida do ambiente do Render
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -321,17 +318,11 @@ def adicionar_pergunta():
             data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
             from_email = os.environ.get('SENDGRID_FROM_EMAIL')
-
             if not from_email:
                 app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
                 return redirect(url_for('pagina_admin'))
-
             for usuario in usuarios:
-                body = (
-                    f"Olá, {usuario.nome}!\n\n"
-                    f"Uma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\n"
-                    f"Prepare-se para testar seus conhecimentos!"
-                )
+                body = (f"Olá, {usuario.nome}!\n\nUma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\nPrepare-se para testar seus conhecimentos!")
                 thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
                 thread.start()
             flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
@@ -409,35 +400,57 @@ def init_db(secret_key):
     if secret_key != expected_key:
         return "Chave secreta inválida.", 403
     try:
-        print("Apagando e recriando o banco de dados...")
+        app.logger.info("Iniciando a reinicialização do banco de dados...")
         db.drop_all()
         db.create_all()
-        print("Inserindo departamentos e usuários...")
+        app.logger.info("Tabelas criadas. Inserindo dados iniciais...")
         dados_iniciais = {
-            "Suporte": [
-                {'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'},
-                {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'},
-            ],
-            "Vendas": [
-                {'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'},
-                {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'},
-            ]
+            "Suporte": [{'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'}, {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'}],
+            "Vendas": [{'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'}, {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'}]
         }
         for nome_depto, lista_usuarios in dados_iniciais.items():
             novo_depto = Departamento(nome=nome_depto)
             db.session.add(novo_depto)
             for user_data in lista_usuarios:
-                novo_usuario = Usuario(
-                    nome=user_data['nome'], 
-                    codigo_acesso=user_data['codigo_acesso'],
-                    email=user_data['email'],
-                    departamento=novo_depto
-                )
+                novo_usuario = Usuario(nome=user_data['nome'], codigo_acesso=user_data['codigo_acesso'], email=user_data['email'], departamento=novo_depto)
                 db.session.add(novo_usuario)
         db.session.commit()
+        app.logger.info("Banco de dados inicializado com sucesso!")
         return "<h1>Banco de dados inicializado com sucesso!</h1>"
     except Exception as e:
+        app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
+
+# --- ROTA DE NOTIFICAÇÃO DO CRON JOB ---
+@app.route('/_send_notifications/<secret_key>')
+def trigger_email_notifications(secret_key):
+    expected_key = os.environ.get('NOTIFICATION_SECRET_KEY', 'sua-outra-chave-muito-secreta')
+    if secret_key != expected_key:
+        return "Chave secreta inválida.", 403
+    try:
+        app.logger.info("Gatilho de notificação recebido. Verificando novas perguntas...")
+        hoje = date.today()
+        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
+        if not perguntas_de_hoje:
+            app.logger.info("Nenhuma pergunta nova para hoje.")
+            return "Nenhuma pergunta nova para hoje.", 200
+        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
+        if not usuarios:
+            app.logger.info("Nenhum usuário com e-mail para notificar.")
+            return "Nenhum usuário com e-mail cadastrado.", 200
+        from_email = os.environ.get('SENDGRID_FROM_EMAIL')
+        if not from_email:
+            app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
+            return "Erro de configuração do servidor (remetente não definido).", 500
+        subject = "Novas perguntas disponíveis no Quiz Produtivo!"
+        for usuario in usuarios:
+            body = (f"Olá, {usuario.nome}!\n\nTemos novas perguntas de conhecimento liberadas hoje para você responder.\n\nAcesse agora e teste seus conhecimentos!")
+            thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
+            thread.start()
+        return f"Processo de notificação iniciado para {len(usuarios)} usuários.", 200
+    except Exception as e:
+        app.logger.error(f"Ocorreu um erro ao executar o gatilho de notificações: {e}")
+        return f"Ocorreu um erro: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
