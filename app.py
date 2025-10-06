@@ -3,30 +3,23 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func, case
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from flask_mail import Mail, Message
 import os
 from threading import Thread
+# MUDANÇA: Novas importações para a API do SendGrid
+import sendgrid
+from sendgrid.helpers.mail import Mail
+
 
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
 app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-dificil'
+# A URL do banco de dados agora é lida do ambiente do Render
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- CONFIGURAÇÕES DE E-MAIL (Exemplo com SendGrid e porta TLS) ---
-app.config['MAIL_SERVER'] = 'smtp.sendgrid.net'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'jenycds@hotmail.com'))
-
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
-mail = Mail(app)
-
 SENHA_ADMIN = "admin123"
 
 # --- MODELOS DO BANCO DE DADOS ---
@@ -77,16 +70,23 @@ def get_texto_da_opcao(pergunta, opcao):
 @app.context_processor
 def utility_processor():
     return dict(get_texto_da_opcao=get_texto_da_opcao)
-    
-def send_email_async(app_context, msg):
+
+def enviar_email_com_sendgrid_api(remetente, destinatario, assunto, corpo_texto):
+    try:
+        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
+        message = Mail(
+            from_email=remetente,
+            to_emails=destinatario,
+            subject=assunto,
+            plain_text_content=corpo_texto)
+        response = sg.send(message)
+        app.logger.info(f"E-mail enviado via API para {destinatario}. Status: {response.status_code}")
+    except Exception as e:
+        app.logger.error(f"Falha ao enviar e-mail via API para {destinatario}: {e}")
+
+def send_email_async(app_context, from_email, to_email, subject, body):
     with app_context:
-        try:
-            mail.send(msg)
-            # Log de sucesso
-            app.logger.info(f"E-mail enviado em segundo plano para {msg.recipients}")
-        except Exception as e:
-            # Log de erro
-            app.logger.error(f"Falha ao enviar e-mail em segundo plano: {e}")
+        enviar_email_com_sendgrid_api(from_email, to_email, subject, body)
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -296,12 +296,10 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
-    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -316,36 +314,32 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
-    
-    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL EM SEGUNDO PLANO COM LOGGING ---
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
-            app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail.")
+            app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
             data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
-            
+            from_email = os.environ.get('SENDGRID_FROM_EMAIL')
+
+            if not from_email:
+                app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
+                return redirect(url_for('pagina_admin'))
+
             for usuario in usuarios:
                 body = (
                     f"Olá, {usuario.nome}!\n\n"
                     f"Uma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\n"
                     f"Prepare-se para testar seus conhecimentos!"
                 )
-                msg = Message(subject=subject, recipients=[usuario.email], body=body)
-                
-                # Inicia a tarefa de envio de e-mail em uma thread separada
-                thread = Thread(target=send_email_async, args=[app.app_context(), msg])
+                thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
                 thread.start()
-                
             flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
         else:
-            # Log para quando não encontra usuários
             app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
     except Exception as e:
         app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
         flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
-    
-    # A página responde IMEDIATAMENTE, sem esperar pelos e-mails.
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
@@ -408,52 +402,12 @@ def pagina_analytics():
         erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
-# Em app.py, no final do arquivo
-
-# ======================================================================
-# ROTA SECRETA PARA O SERVIÇO EXTERNO DE CRON JOB CHAMAR
-# ======================================================================
-@app.route('/_send_notifications/sua-outra-chave-muito-secreta')
-def trigger_email_notifications():
-    try:
-        # Pega a lógica que estava no 'enviar_notificacoes.py'
-        print("Gatilho de notificação recebido. Verificando novas perguntas...")
-        
-        hoje = date.today()
-        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
-        
-        if not perguntas_de_hoje:
-            return "Nenhuma pergunta nova para hoje.", 200
-
-        print(f"Encontradas {len(perguntas_de_hoje)} perguntas novas. Buscando usuários...")
-        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
-        
-        if not usuarios:
-            return "Nenhum usuário com e-mail cadastrado.", 200
-
-        with mail.connect() as conn:
-            for usuario in usuarios:
-                subject = "Novas perguntas disponíveis no Quiz Produtivo!"
-                body = (
-                    f"Olá, {usuario.nome}!\n\n"
-                    f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
-                    f"Acesse agora e teste seus conhecimentos!\n\n"
-                    f"Atenciosamente,\nEquipe Quiz Produtivo"
-                )
-                msg = Message(subject=subject, recipients=[usuario.email], body=body)
-                conn.send(msg)
-                print(f"E-mail enviado para {usuario.email}")
-
-        return f"Processo concluído. {len(usuarios)} e-mails enviados.", 200
-
-    except Exception as e:
-        print(f"Ocorreu um erro ao enviar notificações: {e}")
-        return f"Ocorreu um erro: {e}", 500
-    
-# ======================================================================
 # --- ROTA DE INICIALIZAÇÃO DO BANCO DE DADOS ---
-@app.route('/_init_db/sua-chave-secreta-dificil-de-adivinhar')
-def init_db():
+@app.route('/_init_db/<secret_key>')
+def init_db(secret_key):
+    expected_key = os.environ.get('INIT_DB_SECRET_KEY', 'sua-chave-secreta-dificil-de-adivinhar')
+    if secret_key != expected_key:
+        return "Chave secreta inválida.", 403
     try:
         print("Apagando e recriando o banco de dados...")
         db.drop_all()
@@ -461,7 +415,7 @@ def init_db():
         print("Inserindo departamentos e usuários...")
         dados_iniciais = {
             "Suporte": [
-                {'nome': 'Jenyffer Souza', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'},
+                {'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'},
                 {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'},
             ],
             "Vendas": [
