@@ -445,34 +445,41 @@ def pagina_analytics():
 @app.route('/admin/upload_csv', methods=['POST'])
 def upload_csv():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    if 'arquivo_csv' not in request.files:
-        flash('Nenhum arquivo selecionado.', 'danger')
-        return redirect(url_for('pagina_admin'))
+    # ... (restante do código de validação do arquivo)
+    
     arquivo = request.files['arquivo_csv']
+
     if arquivo.filename == '' or not arquivo.filename.endswith('.csv'):
         flash('Arquivo inválido ou não selecionado. Envie um .csv.', 'danger')
         return redirect(url_for('pagina_admin'))
-    try:
-        # AQUI ESTÁ A MUDANÇA
         
-        # 1. Decodifica o arquivo para uma string
+    try:
+        # 1. Lê todo o conteúdo do arquivo
         file_content = arquivo.stream.read().decode("utf-8-sig")
+        
+        # 2. Tenta "farejar" o delimitador
+        sniffer = csv.Sniffer()
+        
+        # Usa apenas as primeiras 1024 bytes (ou menos, se o arquivo for pequeno) para adivinhar
+        dialect = sniffer.sniff(file_content[:1024]) 
+        
+        # 3. Cria o stream de memória novamente para o DictReader
         stream = io.StringIO(file_content, newline=None)
         
-        # 2. Usa DictReader
+        # 4. Usa o delimitador descoberto e outras opções de segurança
         reader = csv.DictReader(stream, 
-                            delimiter=',', # Força o delimitador de vírgula
-                            skipinitialspace=True, # Ignora espaços após o delimitador
-                            restval='') # Garante que campos vazios virem string vazia, não None
+                                delimiter=dialect.delimiter, # Usa o delimitador DESCOBERTO!
+                                skipinitialspace=True, 
+                                restval='') 
         
-        # 3. SALVA OS CABEÇALHOS NA SESSÃO
+        # 5. SALVA OS CABEÇALHOS NA SESSÃO
         headers = reader.fieldnames if reader.fieldnames else []
         session['csv_headers'] = headers
         
         validated_data = []
         has_valid_rows = False
         
-        # 4. Processa as linhas
+        # 6. Processa as linhas
         for row in reader:
             is_valid, errors = validar_linha_csv(row)
             if is_valid: has_valid_rows = True
@@ -482,7 +489,7 @@ def upload_csv():
         session['has_valid_rows'] = has_valid_rows
         
         return redirect(url_for('preview_csv'))
-    except Exception as e:
+        except Exception as e:
         app.logger.error(f"Erro ao ler o arquivo CSV: {e}")
         flash(f"Ocorreu um erro ao processar o arquivo CSV: {e}", "danger")
         return redirect(url_for('pagina_admin'))
