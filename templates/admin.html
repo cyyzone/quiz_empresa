@@ -117,37 +117,43 @@
     <div class="accordion-panel">
         <div style="padding: 20px 0;">
             <form action="{{ url_for('adicionar_pergunta') }}" method="post" style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
-                <h3>Cadastrar Nova Pergunta</h3>
-                <label for="tipo">Tipo de Pergunta:</label><br>
-                <select id="tipo-pergunta" name="tipo" required onchange="toggleQuestionFields()">
-                    <option value="multipla_escolha" selected>Múltipla Escolha</option>
-                    <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
-                </select><br><br>
-                <label for="texto">Texto da Pergunta:</label><br>
-                <textarea name="texto" rows="3" style="width: 100%;" required></textarea><br><br>
-                <div id="campos-multipla-escolha">
-                    <label for="opcao_a">Opção A:</label><br>
-                    <input type="text" name="opcao_a" style="width: 100%;"><br><br>
-                    <label for="opcao_b">Opção B:</label><br>
-                    <input type="text" name="opcao_b" style="width: 100%;"><br><br>
-                    <label for="opcao_c">Opção C:</label><br>
-                    <input type="text" name="opcao_c" style="width: 100%;"><br><br>
-                    <label for="opcao_d">Opção D:</label><br>
-                    <input type="text" name="opcao_d" style="width: 100%;"><br><br>
-                </div>
-                <label for="resposta_correta">Resposta Correta:</label><br>
-                <select id="resposta-multipla-escolha" name="resposta_correta">
-                    <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
-                </select>
-                <select id="resposta-vf" name="resposta_correta_vf" style="display: none;">
-                    <option value="v">Verdadeiro</option><option value="f">Falso</option>
-                </select><br><br>
-                <label for="data_liberacao">Data de Liberação:</label><br>
-                <input type="date" name="data_liberacao" required><br><br>
-                <label for="tempo_limite">Tempo em Segundos:</label><br>
-                <input type="number" name="tempo_limite" value="30" min="5" style="width: 100px;" required><br><br>
-                <button type="submit" class="btn">Salvar Pergunta</button>
-            </form>
+    <h3>Cadastrar Nova Pergunta</h3>
+    
+    <label for="tipo">Tipo de Pergunta:</label><br>
+    <select id="tipo-pergunta" name="tipo" required onchange="toggleQuestionFields()">
+        <option value="multipla_escolha" selected>Múltipla Escolha</option>
+        <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
+    </select><br><br>
+    <label for="texto">Texto da Pergunta:</label><br>
+    <textarea name="texto" rows="3" style="width: 100%;" required></textarea><br><br>
+    <div id="campos-multipla-escolha">
+        <label for="opcao_a">Opção A:</label><br>
+        <input type="text" name="opcao_a" style="width: 100%;"><br><br>
+        <label for="opcao_b">Opção B:</label><br>
+        <input type="text" name="opcao_b" style="width: 100%;"><br><br>
+        <label for="opcao_c">Opção C:</label><br>
+        <input type="text" name="opcao_c" style="width: 100%;"><br><br>
+        <label for="opcao_d">Opção D:</label><br>
+        <input type="text" name="opcao_d" style="width: 100%;"><br><br>
+    </div>
+    <label for="resposta_correta">Resposta Correta:</label><br>
+    <select id="resposta-multipla-escolha" name="resposta_correta">
+        <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
+    </select>
+    <select id="resposta-vf" name="resposta_correta_vf" style="display: none;">
+        <option value="v">Verdadeiro</option><option value="f">Falso</option>
+    </select><br><br>
+    <label for="data_liberacao">Data de Liberação:</label><br>
+    <input type="date" name="data_liberacao" required><br><br>
+    <label for="tempo_limite">Tempo em Segundos:</label><br>
+    <input type="number" name="tempo_limite" value="30" min="5" style="width: 100px;" required><br><br>
+
+    <div style="background-color: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <input type="checkbox" id="enviar_notificacao" name="enviar_notificacao" value="sim" checked style="width: auto;">
+        <label for="enviar_notificacao" style="font-weight: bold; cursor: pointer;">Enviar e-mail de notificação para os usuários?</label>
+    </div>
+    <button type="submit" class="btn">Salvar Pergunta</button>
+</form>
             <div class="ranking-container" style="max-width: 900px; margin: 40px auto;">
                 <h3>Perguntas Cadastradas</h3>
                 <table>
