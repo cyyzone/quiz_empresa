@@ -16,9 +16,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = 'jenycds8@gmail.com'  # SUBSTITUA PELO SEU E-MAIL
-app.config['MAIL_PASSWORD'] = 'mgbz mojd yqye ojrx'      # SUBSTITUA PELA SUA SENHA DE APP
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'jenycds8@gmail.com')
+app.config['MAIL_USERNAME'] = 'seu-email@gmail.com'  # SUBSTITUA PELO SEU E-MAIL
+app.config['MAIL_PASSWORD'] = 'xxxxxxxxxxxxxxxx'      # SUBSTITUA PELA SUA SENHA DE APP
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'seu-email@gmail.com')
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
@@ -228,12 +228,16 @@ def excluir_setor(departamento_id):
 def adicionar_usuario():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     codigo = request.form['codigo_acesso']
+    email = request.form['email']
     if Usuario.query.filter_by(codigo_acesso=codigo).first():
         flash(f'Erro: O código de acesso "{codigo}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
+    if Usuario.query.filter_by(email=email).first():
+        flash(f'Erro: O e-mail "{email}" já está em uso.', 'danger')
+        return redirect(url_for('pagina_admin'))
     novo_usuario = Usuario(
         nome=request.form['nome'],
-        email=request.form['email'], # <--- LÓGICA DO E-MAIL ADICIONADA
+        email=email,
         codigo_acesso=codigo,
         departamento_id=request.form['departamento_id']
     )
@@ -254,12 +258,20 @@ def atualizar_usuario(usuario_id):
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     usuario = Usuario.query.get_or_404(usuario_id)
     novo_codigo = request.form['codigo_acesso']
-    usuario_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.codigo_acesso == novo_codigo).first()
-    if usuario_existente:
+    novo_email = request.form['email']
+    
+    codigo_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.codigo_acesso == novo_codigo).first()
+    if codigo_existente:
         flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+
+    email_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first()
+    if email_existente:
+        flash(f'Erro: O e-mail "{novo_email}" já está em uso por outro usuário.', 'danger')
+        return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+
     usuario.nome = request.form['nome']
-    usuario.email = request.form['email'] # <--- LÓGICA DO E-MAIL ADICIONADA
+    usuario.email = novo_email
     usuario.codigo_acesso = novo_codigo
     usuario.departamento_id = request.form['departamento_id']
     db.session.commit()
@@ -358,6 +370,46 @@ def pagina_analytics():
         usuario_nome = r.usuario.nome
         erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
+
+
+# --- ROTA DE INICIALIZAÇÃO DO BANCO DE DADOS ---
+@app.route('/_init_db/sua-chave-secreta-dificil-de-adivinhar')
+def init_db():
+    try:
+        print("Apagando e recriando o banco de dados...")
+        db.drop_all()
+        db.create_all()
+
+        print("Inserindo departamentos e usuários...")
+        dados_iniciais = {
+            "Suporte": [
+                {'nome': 'Ana Oliveira', 'codigo_acesso': '1234', 'email': 'ana.oliveira@empresa.com'},
+                {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'},
+            ],
+            "Vendas": [
+                {'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'},
+                {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'},
+            ]
+        }
+
+        for nome_depto, lista_usuarios in dados_iniciais.items():
+            novo_depto = Departamento(nome=nome_depto)
+            db.session.add(novo_depto)
+            for user_data in lista_usuarios:
+                novo_usuario = Usuario(
+                    nome=user_data['nome'], 
+                    codigo_acesso=user_data['codigo_acesso'],
+                    email=user_data['email'],
+                    departamento=novo_depto
+                )
+                db.session.add(novo_usuario)
+        
+        db.session.commit()
+        return "<h1>Banco de dados inicializado com sucesso!</h1>"
+
+    except Exception as e:
+        return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
