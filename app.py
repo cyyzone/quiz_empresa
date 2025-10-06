@@ -16,13 +16,22 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # --- CONFIGURAÇÕES DE E-MAIL ---
 # --- CONFIGURAÇÕES DE E-MAIL ---
 # (Lembre-se de adicionar 'import os' no topo do seu arquivo)
-app.config['MAIL_SERVER'] = 'smtp.sendgrid.net' # Servidor do SendGrid
-app.config['MAIL_PORT'] = 465
-app.config['MAIL_USE_SSL'] = True
+# app.config['MAIL_SERVER'] = 'smtp.sendgrid.net' # Servidor do SendGrid
+#app.config['MAIL_PORT'] = 465
+#app.config['MAIL_USE_SSL'] = True
 # Agora, o código busca as credenciais das Variáveis de Ambiente do Render
+#app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+#app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+#app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_USERNAME'))
+
+# Tente esta configuração alternativa
+app.config['MAIL_SERVER'] = 'smtp.sendgrid.net'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USE_SSL'] = False # Importante desativar SSL ao usar TLS
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_USERNAME'))
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'jenycds@hotmail.com')
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
