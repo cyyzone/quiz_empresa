@@ -291,10 +291,12 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
+    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -309,6 +311,30 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
+
+    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL DE NOTIFICAÇÃO IMEDIATA ---
+    try:
+        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
+        if usuarios:
+            data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
+            subject = "Fique atento: Nova pergunta agendada no Quiz!"
+            
+            with mail.connect() as conn:
+                for usuario in usuarios:
+                    body = (
+                        f"Olá, {usuario.nome}!\n\n"
+                        f"Uma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\n"
+                        f"Prepare-se para testar seus conhecimentos!\n\n"
+                        f"Atenciosamente,\nEquipe Quiz Produtivo"
+                    )
+                    msg = Message(subject=subject, recipients=[usuario.email], body=body)
+                    conn.send(msg)
+            flash(f'Notificação enviada para {len(usuarios)} usuários.', 'success')
+    except Exception as e:
+        print(f"ERRO AO ENVIAR E-MAIL DE NOTIFICAÇÃO: {e}")
+        flash('Pergunta salva, mas ocorreu um erro ao enviar a notificação por e-mail.', 'danger')
+    # --- FIM: LÓGICA DE ENVIO DE E-MAIL ---
+
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
