@@ -1,3 +1,0 @@
-﻿tipo,texto,opcao_a,opcao_b,opcao_c,opcao_d,resposta_correta,data_liberacao,tempo_limite,enviar_notificacao
-multipla_escolha,"Qual é a principal finalidade do Plano Automático?","Executar tarefas automaticamente","Programar a criação de futuras atividades","Gerar relatórios de desempenho","Distribuir tarefas para a equipe",b,15/10/2025,30,sim
-verdadeiro_falso,"Para garantir uma atividade no dia 1º, mesmo que seja fim de semana, devo desmarcar os dias de trabalho.","","","",,f,16/10/2025,20,nao

@@ -445,11 +445,10 @@ def pagina_analytics():
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
 @app.route('/admin/upload_csv', methods=['POST'])
-def upload_csv(): # Mantivemos o nome da rota e da função para não quebrar o HTML
+def upload_csv():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    # Se você mudou o 'name' no HTML (Passo 2), use 'arquivo_planilha' aqui
     arquivo = request.files.get('arquivo_planilha') 
 
     if not arquivo or not (arquivo.filename.lower().endswith('.xls') or arquivo.filename.lower().endswith('.xlsx')):
@@ -457,32 +456,37 @@ def upload_csv(): # Mantivemos o nome da rota e da função para não quebrar o 
         return redirect(url_for('pagina_admin'))
 
     try:
-        # 1. Ler a planilha inteira com pandas. Ele cuida de tudo para nós.
         df = pd.read_excel(arquivo)
-
-        # 2. (CRUCIAL) Substituir células vazias (NaN) por strings vazias.
-        #    Isso garante compatibilidade com sua função de validação.
         df = df.fillna('')
         
-        # 3. Converter os tipos de dados para string para evitar problemas de formato (ex: datas, números)
-        #    Isso garante que os valores sejam tratados como texto, como eram no CSV.
+        # --- AJUSTE DA DATA (INÍCIO) ---
+        # 1. Verifica se a coluna de data existe na planilha
+        if 'data_liberacao' in df.columns:
+            # 2. Converte a coluna para o tipo datetime do pandas, tratando possíveis erros
+            df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce')
+            
+            # 3. Formata a data para o padrão brasileiro (DD/MM/AAAA)
+            #    Onde a data for inválida (NaT), deixará a célula vazia.
+            df['data_liberacao'] = df['data_liberacao'].dt.strftime('%d/%m/%Y').fillna('')
+
+        # --- AJUSTE DA DATA (FIM) ---
+
+        # Agora, convertemos o RESTO para string, como antes
         for col in df.columns:
-            df[col] = df[col].astype(str)
-            # Remove ".0" de números inteiros que o pandas pode ter convertido para float
-            if df[col].str.endswith('.0').any():
-                df[col] = df[col].str.replace(r'\.0$', '', regex=True)
+            # Não precisamos converter a data novamente
+            if col != 'data_liberacao':
+                df[col] = df[col].astype(str)
+                if df[col].str.contains(r'\.0$').any():
+                    df[col] = df[col].str.replace(r'\.0$', '', regex=True)
 
-
-        # 4. Obter os cabeçalhos e os dados no formato de lista de dicionários
         headers = df.columns.tolist()
         dados_da_planilha = df.to_dict(orient='records')
         
-        session['csv_headers'] = headers # Podemos manter o nome da variável na sessão
+        session['csv_headers'] = headers
         
         validated_data = []
         has_valid_rows = False
         
-        # 5. O resto da lógica é EXATAMENTE A MESMA!
         for row in dados_da_planilha:
             is_valid, errors = validar_linha_csv(row)
             if is_valid: has_valid_rows = True
