@@ -4,6 +4,7 @@ from sqlalchemy.sql import func, case
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from flask_mail import Mail, Message
+import os
 
 app = Flask(__name__)
 
