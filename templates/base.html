@@ -83,7 +83,20 @@
         a { color: var(--cor-primaria); font-weight: 700; text-decoration: none; }
         a:hover { text-decoration: underline; }
         .login-container, .dashboard-container, .ranking-container, .quiz-container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); text-align: center; }
-        input[type="password"], input[type="text"], input[type="number"], textarea, select { padding: 12px; margin-top: 10px; width: 250px; border: 1px solid var(--cor-borda); border-radius: 8px; font-family: 'Nunito', sans-serif; font-size: 16px; }
+        
+        /* --- Estilos de Formulários --- */
+    input[type="password"], input[type="text"], input[type="number"], input[type="email"], textarea, select {
+    padding: 12px;
+    margin-top: 10px;
+    /* MUDANÇA 1: A largura agora é 100% para preencher o contêiner */
+    width: 100%;
+    border: 1px solid var(--cor-borda);
+    border-radius: 8px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px;
+    /* MUDANÇA 2: Boa prática para o layout funcionar melhor com 100% */
+    box-sizing: border-box;
+}
         .ranking-container table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         .ranking-container th, .ranking-container td { padding: 15px; text-align: left; border-bottom: 1px solid var(--cor-borda); }
         .ranking-container th { background-color: var(--cor-primaria); color: var(--cor-texto-claro); font-size: 18px; }

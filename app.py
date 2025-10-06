@@ -16,9 +16,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = 'seu-email@gmail.com'  # SUBSTITUA PELO SEU E-MAIL
-app.config['MAIL_PASSWORD'] = 'xxxxxxxxxxxxxxxx'      # SUBSTITUA PELA SUA SENHA DE APP
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'seu-email@gmail.com')
+app.config['MAIL_USERNAME'] = 'jenycds8@gmail.com'  # SUBSTITUA PELO SEU E-MAIL
+app.config['MAIL_PASSWORD'] = 'mgbz mojd yqye ojrx'      # SUBSTITUA PELA SUA SENHA DE APP
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'jenycds8@gmail.com')
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
@@ -410,6 +410,47 @@ def init_db():
     except Exception as e:
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
 
+# Em app.py, no final do arquivo
+
+# ======================================================================
+# ROTA SECRETA PARA O SERVIÇO EXTERNO DE CRON JOB CHAMAR
+# ======================================================================
+@app.route('/_send_notifications/sua-outra-chave-muito-secreta')
+def trigger_email_notifications():
+    try:
+        # Pega a lógica que estava no 'enviar_notificacoes.py'
+        print("Gatilho de notificação recebido. Verificando novas perguntas...")
+        
+        hoje = date.today()
+        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
+        
+        if not perguntas_de_hoje:
+            return "Nenhuma pergunta nova para hoje.", 200
+
+        print(f"Encontradas {len(perguntas_de_hoje)} perguntas novas. Buscando usuários...")
+        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
+        
+        if not usuarios:
+            return "Nenhum usuário com e-mail cadastrado.", 200
+
+        with mail.connect() as conn:
+            for usuario in usuarios:
+                subject = "Novas perguntas disponíveis no Quiz Produtivo!"
+                body = (
+                    f"Olá, {usuario.nome}!\n\n"
+                    f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
+                    f"Acesse agora e teste seus conhecimentos!\n\n"
+                    f"Atenciosamente,\nEquipe Quiz Produtivo"
+                )
+                msg = Message(subject=subject, recipients=[usuario.email], body=body)
+                conn.send(msg)
+                print(f"E-mail enviado para {usuario.email}")
+
+        return f"Processo concluído. {len(usuarios)} e-mails enviados.", 200
+
+    except Exception as e:
+        print(f"Ocorreu um erro ao enviar notificações: {e}")
+        return f"Ocorreu um erro: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
