@@ -293,10 +293,12 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
+    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -311,26 +313,48 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
+
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
             app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
-            data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
+            
+            hoje = date.today()
+            data_liberacao = nova_pergunta.data_liberacao
+            link_do_quiz = "https://quiz-empresa.onrender.com/"
+
+            # Lógica para personalizar o texto da data
+            if data_liberacao == hoje:
+                texto_data = "e já está liberada para responder hoje!"
+            else:
+                data_formatada = data_liberacao.strftime('%d/%m/%Y')
+                texto_data = f"e está agendada para ser liberada no dia {data_formatada}."
+
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
             from_email = os.environ.get('SENDGRID_FROM_EMAIL')
+
             if not from_email:
                 app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
-                return redirect(url_for('pagina_admin'))
-            for usuario in usuarios:
-                body = (f"Olá, {usuario.nome}!\n\nUma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\nPrepare-se para testar seus conhecimentos!")
-                thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
-                thread.start()
-            flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
+            else:
+                for usuario in usuarios:
+                    # Corpo do e-mail agora usa o texto_data e o link_do_quiz
+                    body = (
+                        f"Olá, {usuario.nome}!\n\n"
+                        f"Uma nova pergunta de conhecimento foi cadastrada {texto_data}\n\n"
+                        f"Acesse o quiz e teste seus conhecimentos:\n"
+                        f"{link_do_quiz}\n\n"
+                        f"Atenciosamente,\nEquipe Quiz Produtivo"
+                    )
+                    thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
+                    thread.start()
+                
+                flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
         else:
             app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
     except Exception as e:
         app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
         flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
+    
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
@@ -424,30 +448,46 @@ def init_db(secret_key):
 # --- ROTA DE NOTIFICAÇÃO DO CRON JOB ---
 @app.route('/_send_notifications/<secret_key>')
 def trigger_email_notifications(secret_key):
+    # Para mais segurança, a chave secreta é lida das variáveis de ambiente
     expected_key = os.environ.get('NOTIFICATION_SECRET_KEY', 'sua-outra-chave-muito-secreta')
     if secret_key != expected_key:
         return "Chave secreta inválida.", 403
+
     try:
         app.logger.info("Gatilho de notificação recebido. Verificando novas perguntas...")
         hoje = date.today()
         perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
+        
         if not perguntas_de_hoje:
             app.logger.info("Nenhuma pergunta nova para hoje.")
             return "Nenhuma pergunta nova para hoje.", 200
+
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if not usuarios:
             app.logger.info("Nenhum usuário com e-mail para notificar.")
             return "Nenhum usuário com e-mail cadastrado.", 200
+        
         from_email = os.environ.get('SENDGRID_FROM_EMAIL')
         if not from_email:
             app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
             return "Erro de configuração do servidor (remetente não definido).", 500
+
         subject = "Novas perguntas disponíveis no Quiz Produtivo!"
+        link_do_quiz = "https://quiz-empresa.onrender.com/"
+
         for usuario in usuarios:
-            body = (f"Olá, {usuario.nome}!\n\nTemos novas perguntas de conhecimento liberadas hoje para você responder.\n\nAcesse agora e teste seus conhecimentos!")
+            body = (
+                f"Olá, {usuario.nome}!\n\n"
+                f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
+                f"Acesse agora e teste seus conhecimentos:\n"
+                f"{link_do_quiz}\n\n"
+                f"Atenciosamente,\nEquipe Quiz Produtivo"
+            )
             thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
             thread.start()
+
         return f"Processo de notificação iniciado para {len(usuarios)} usuários.", 200
+
     except Exception as e:
         app.logger.error(f"Ocorreu um erro ao executar o gatilho de notificações: {e}")
         return f"Ocorreu um erro: {e}", 500
