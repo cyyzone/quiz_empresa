@@ -30,19 +30,22 @@
                             {% endif %}
                         </td>
                         
-                        {% for key in headers %}
-                            <td title="{{ row.errors.get(key, '') }}">
-                                <input type="text" 
-                                       name="row-{{ loop.index0 }}-{{ key }}" 
-                                       value="{{ row.data.get(key, '') }}"
-                                       class="form-control"
-                                       style="width: 180px;">
-                                       
-                                {% if key in row.errors %}
-                                <small style="color: darkred; font-size: 0.8em;">Erro: {{ row.errors.get(key, '') }}</small>
-                                {% endif %}
-                            </td>
-                        {% endfor %}
+                       {% for key in headers %}
+    <td class="{{ 'cell-error' if key in row.errors else '' }}"> 
+        
+        <input type="text" 
+               name="row-{{ loop.index0 }}-{{ key }}" 
+               value="{{ row.data.get(key, '') }}"
+               class="form-control"
+               style="width: 180px;">
+        
+        {% if key in row.errors %}
+            <div style="color: darkred; font-size: 0.8em; margin-top: 5px;">
+                ❌ Erro: {{ row.errors.get(key, '') }}
+            </div>
+        {% endif %}
+    </td>
+{% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
