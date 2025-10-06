@@ -21,6 +21,9 @@
                 </thead>
                 <tbody>
                     {% for row in data %}
+                    {# --- CORREÇÃO 1: Armazenando o índice do loop externo em uma variável --- #}
+                    {% set row_index = loop.index0 %} 
+                    
                     <tr class="{{ 'valid-row' if row.is_valid else 'invalid-row' }}">
                         <td>
                             {% if row.is_valid %}
@@ -34,7 +37,9 @@
                         <td class="{{ 'cell-error' if key in row.errors else '' }}"> 
                             
                             <input type="text" 
-                                   name="row-{{ loop.parent.loop.index0 }}-{{ key }}"  value="{{ row.data.get(key, '') }}"
+                                   {# --- CORREÇÃO 2: Usando a variável que criamos --- #}
+                                   name="row-{{ row_index }}-{{ key }}"
+                                   value="{{ row.data.get(key, '') }}"
                                    class="form-control"
                                    style="width: 180px;">
                             
