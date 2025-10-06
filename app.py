@@ -5,33 +5,25 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from flask_mail import Mail, Message
 import os
+from threading import Thread
 
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
 app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-dificil'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quiz.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- CONFIGURAÇÕES DE E-MAIL ---
-# --- CONFIGURAÇÕES DE E-MAIL ---
-# (Lembre-se de adicionar 'import os' no topo do seu arquivo)
-# app.config['MAIL_SERVER'] = 'smtp.sendgrid.net' # Servidor do SendGrid
-#app.config['MAIL_PORT'] = 465
-#app.config['MAIL_USE_SSL'] = True
-# Agora, o código busca as credenciais das Variáveis de Ambiente do Render
-#app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-#app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-#app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_USERNAME'))
-
-# Tente esta configuração alternativa
+# --- CONFIGURAÇÕES DE E-MAIL (Exemplo com SendGrid e porta TLS) ---
 app.config['MAIL_SERVER'] = 'smtp.sendgrid.net'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False # Importante desativar SSL ao usar TLS
+app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'jenycds@hotmail.com')
+# Certifique-se de ter um e-mail verificado no SendGrid para usar como remetente
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'jenycds@hotmail.com'))
+
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
@@ -87,6 +79,14 @@ def get_texto_da_opcao(pergunta, opcao):
 @app.context_processor
 def utility_processor():
     return dict(get_texto_da_opcao=get_texto_da_opcao)
+    
+def send_email_async(app_context, msg):
+    with app_context:
+        try:
+            mail.send(msg)
+            print(f"E-mail enviado em segundo plano para {msg.recipients}")
+        except Exception as e:
+            print(f"Falha ao enviar e-mail em segundo plano: {e}")
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -248,12 +248,7 @@ def adicionar_usuario():
     if Usuario.query.filter_by(email=email).first():
         flash(f'Erro: O e-mail "{email}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
-    novo_usuario = Usuario(
-        nome=request.form['nome'],
-        email=email,
-        codigo_acesso=codigo,
-        departamento_id=request.form['departamento_id']
-    )
+    novo_usuario = Usuario(nome=request.form['nome'], email=email, codigo_acesso=codigo, departamento_id=request.form['departamento_id'])
     db.session.add(novo_usuario)
     db.session.commit()
     flash('Usuário adicionado com sucesso!', 'success')
@@ -272,17 +267,14 @@ def atualizar_usuario(usuario_id):
     usuario = Usuario.query.get_or_404(usuario_id)
     novo_codigo = request.form['codigo_acesso']
     novo_email = request.form['email']
-    
     codigo_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.codigo_acesso == novo_codigo).first()
     if codigo_existente:
         flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
-
     email_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first()
     if email_existente:
         flash(f'Erro: O e-mail "{novo_email}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
-
     usuario.nome = request.form['nome']
     usuario.email = novo_email
     usuario.codigo_acesso = novo_codigo
@@ -304,12 +296,10 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
-    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -324,30 +314,28 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
-
-    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL DE NOTIFICAÇÃO IMEDIATA ---
+    
+    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL EM SEGUNDO PLANO ---
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
             data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
             
-            with mail.connect() as conn:
-                for usuario in usuarios:
-                    body = (
-                        f"Olá, {usuario.nome}!\n\n"
-                        f"Uma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\n"
-                        f"Prepare-se para testar seus conhecimentos!\n\n"
-                        f"Atenciosamente,\nEquipe Quiz Produtivo"
-                    )
-                    msg = Message(subject=subject, recipients=[usuario.email], body=body)
-                    conn.send(msg)
-            flash(f'Notificação enviada para {len(usuarios)} usuários.', 'success')
+            for usuario in usuarios:
+                body = (
+                    f"Olá, {usuario.nome}!\n\n"
+                    f"Uma nova pergunta de conhecimento foi cadastrada e está agendada para ser liberada no dia {data_formatada}.\n\n"
+                    f"Prepare-se para testar seus conhecimentos!"
+                )
+                msg = Message(subject=subject, recipients=[usuario.email], body=body)
+                thread = Thread(target=send_email_async, args=[app.app_context(), msg])
+                thread.start()
+            flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
     except Exception as e:
-        print(f"ERRO AO ENVIAR E-MAIL DE NOTIFICAÇÃO: {e}")
-        flash('Pergunta salva, mas ocorreu um erro ao enviar a notificação por e-mail.', 'danger')
-    # --- FIM: LÓGICA DE ENVIO DE E-MAIL ---
-
+        print(f"ERRO AO PREPARAR E-MAILS: {e}")
+        flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
+    
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
@@ -410,7 +398,6 @@ def pagina_analytics():
         erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
-
 # --- ROTA DE INICIALIZAÇÃO DO BANCO DE DADOS ---
 @app.route('/_init_db/sua-chave-secreta-dificil-de-adivinhar')
 def init_db():
@@ -418,7 +405,6 @@ def init_db():
         print("Apagando e recriando o banco de dados...")
         db.drop_all()
         db.create_all()
-
         print("Inserindo departamentos e usuários...")
         dados_iniciais = {
             "Suporte": [
@@ -430,7 +416,6 @@ def init_db():
                 {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'},
             ]
         }
-
         for nome_depto, lista_usuarios in dados_iniciais.items():
             novo_depto = Departamento(nome=nome_depto)
             db.session.add(novo_depto)
@@ -442,54 +427,10 @@ def init_db():
                     departamento=novo_depto
                 )
                 db.session.add(novo_usuario)
-        
         db.session.commit()
         return "<h1>Banco de dados inicializado com sucesso!</h1>"
-
     except Exception as e:
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
-
-# Em app.py, no final do arquivo
-
-# ======================================================================
-# ROTA SECRETA PARA O SERVIÇO EXTERNO DE CRON JOB CHAMAR
-# ======================================================================
-@app.route('/_send_notifications/sua-outra-chave-muito-secreta')
-def trigger_email_notifications():
-    try:
-        # Pega a lógica que estava no 'enviar_notificacoes.py'
-        print("Gatilho de notificação recebido. Verificando novas perguntas...")
-        
-        hoje = date.today()
-        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
-        
-        if not perguntas_de_hoje:
-            return "Nenhuma pergunta nova para hoje.", 200
-
-        print(f"Encontradas {len(perguntas_de_hoje)} perguntas novas. Buscando usuários...")
-        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
-        
-        if not usuarios:
-            return "Nenhum usuário com e-mail cadastrado.", 200
-
-        with mail.connect() as conn:
-            for usuario in usuarios:
-                subject = "Novas perguntas disponíveis no Quiz Produtivo!"
-                body = (
-                    f"Olá, {usuario.nome}!\n\n"
-                    f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
-                    f"Acesse agora e teste seus conhecimentos!\n\n"
-                    f"Atenciosamente,\nEquipe Quiz Produtivo"
-                )
-                msg = Message(subject=subject, recipients=[usuario.email], body=body)
-                conn.send(msg)
-                print(f"E-mail enviado para {usuario.email}")
-
-        return f"Processo concluído. {len(usuarios)} e-mails enviados.", 200
-
-    except Exception as e:
-        print(f"Ocorreu um erro ao enviar notificações: {e}")
-        return f"Ocorreu um erro: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
