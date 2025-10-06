@@ -141,7 +141,7 @@
     </div>
 
     <form action="{{ url_for('upload_csv') }}" method="post" enctype="multipart/form-data">
-        <input type="file" name="arquivo_csv" accept=".csv" required>
+        <input type="file" name="arquivo_planilha" class="form-control" accept=".xls, .xlsx" required>
         <button type="submit" class="btn" style="margin-top: 10px;">Importar Arquivo</button>
     </form>
 </div>

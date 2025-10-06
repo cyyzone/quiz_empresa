@@ -9,6 +9,8 @@ import sendgrid
 from sendgrid.helpers.mail import Mail
 import csv
 import io
+import pandas as pd # Biblioteca para manipulação de planilhas Excel
+
 
 app = Flask(__name__)
 
@@ -443,59 +445,45 @@ def pagina_analytics():
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
 @app.route('/admin/upload_csv', methods=['POST'])
-def upload_csv():
+def upload_csv(): # Mantivemos o nome da rota e da função para não quebrar o HTML
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    arquivo = request.files.get('arquivo_csv')
+    # Se você mudou o 'name' no HTML (Passo 2), use 'arquivo_planilha' aqui
+    arquivo = request.files.get('arquivo_planilha') 
 
-    if not arquivo or arquivo.filename == '' or not arquivo.filename.lower().endswith('.csv'):
-        flash('Arquivo inválido ou não selecionado. Envie um arquivo .csv.', 'danger')
+    if not arquivo or not (arquivo.filename.lower().endswith('.xls') or arquivo.filename.lower().endswith('.xlsx')):
+        flash('Arquivo inválido ou não selecionado. Envie uma planilha .xls ou .xlsx.', 'danger')
         return redirect(url_for('pagina_admin'))
 
     try:
-        # 1. Decodifica o conteúdo do arquivo com utf-8-sig para remover BOM (Byte Order Mark)
-        file_content = arquivo.stream.read().decode("utf-8-sig")
-        
-        # 2. Tenta detectar o delimitador de forma mais robusta
-        delimitador_encontrado = None
-        possiveis_delimitadores = [';', ',', '\t'] # Testa ponto e vírgula, vírgula e tab
-        
-        for delim in possiveis_delimitadores:
-            # Cria um stream em memória para testar
-            stream_teste = io.StringIO(file_content)
-            reader_teste = csv.reader(stream_teste, delimiter=delim)
-            try:
-                primeira_linha = next(reader_teste)
-                # Se a primeira linha tem mais de uma coluna, encontramos o delimitador certo!
-                if len(primeira_linha) > 1:
-                    delimitador_encontrado = delim
-                    break
-            except (StopIteration, csv.Error):
-                # Se o arquivo estiver vazio ou der erro na leitura, continua tentando
-                continue
+        # 1. Ler a planilha inteira com pandas. Ele cuida de tudo para nós.
+        df = pd.read_excel(arquivo)
 
-        # Se mesmo após o teste manual não acharmos, tentamos o Sniffer como último recurso
-        if not delimitador_encontrado:
-             sniffer = csv.Sniffer()
-             dialect = sniffer.sniff(file_content[:1024])
-             delimitador_encontrado = dialect.delimiter
-
-        if not delimitador_encontrado:
-            # Se ainda assim não encontrarmos, lançamos um erro claro.
-            raise csv.Error("Não foi possível determinar o delimitador do arquivo. Use vírgula (,) ou ponto e vírgula (;).")
-
-        # 3. Processa o arquivo com o delimitador correto
-        stream = io.StringIO(file_content)
-        reader = csv.DictReader(stream, delimiter=delimitador_encontrado, skipinitialspace=True)
+        # 2. (CRUCIAL) Substituir células vazias (NaN) por strings vazias.
+        #    Isso garante compatibilidade com sua função de validação.
+        df = df.fillna('')
         
-        headers = reader.fieldnames if reader.fieldnames else []
-        session['csv_headers'] = headers
+        # 3. Converter os tipos de dados para string para evitar problemas de formato (ex: datas, números)
+        #    Isso garante que os valores sejam tratados como texto, como eram no CSV.
+        for col in df.columns:
+            df[col] = df[col].astype(str)
+            # Remove ".0" de números inteiros que o pandas pode ter convertido para float
+            if df[col].str.endswith('.0').any():
+                df[col] = df[col].str.replace(r'\.0$', '', regex=True)
+
+
+        # 4. Obter os cabeçalhos e os dados no formato de lista de dicionários
+        headers = df.columns.tolist()
+        dados_da_planilha = df.to_dict(orient='records')
+        
+        session['csv_headers'] = headers # Podemos manter o nome da variável na sessão
         
         validated_data = []
         has_valid_rows = False
         
-        for row in reader:
+        # 5. O resto da lógica é EXATAMENTE A MESMA!
+        for row in dados_da_planilha:
             is_valid, errors = validar_linha_csv(row)
             if is_valid: has_valid_rows = True
             validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
@@ -505,15 +493,11 @@ def upload_csv():
         
         return redirect(url_for('preview_csv'))
         
-    except csv.Error as e:
-        app.logger.error(f"Erro de CSV ao processar o arquivo: {e}")
-        flash(str(e), "danger")
-        return redirect(url_for('pagina_admin'))
-        
     except Exception as e:
-        app.logger.error(f"Erro geral ao ler o arquivo CSV: {e}")
-        flash(f"Ocorreu um erro inesperado ao processar o arquivo: {e}", "danger")
+        app.logger.error(f"Erro ao ler a planilha Excel: {e}")
+        flash(f"Ocorreu um erro inesperado ao processar a planilha: {e}", "danger")
         return redirect(url_for('pagina_admin'))
+
     
 @app.route('/admin/preview_csv')
 def preview_csv():
