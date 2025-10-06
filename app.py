@@ -7,6 +7,8 @@ import os
 from threading import Thread
 import sendgrid
 from sendgrid.helpers.mail import Mail
+import csv
+import io
 
 app = Flask(__name__)
 
@@ -84,6 +86,41 @@ def enviar_email_com_sendgrid_api(remetente, destinatario, assunto, corpo_texto)
 def send_email_async(app_context, from_email, to_email, subject, body):
     with app_context:
         enviar_email_com_sendgrid_api(from_email, to_email, subject, body)
+
+def disparar_notificacao_nova_pergunta(pergunta):
+    """Função auxiliar para disparar e-mails para uma nova pergunta."""
+    try:
+        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
+        if usuarios:
+            app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
+            
+            hoje = date.today()
+            link_do_quiz = "https://quiz-empresa.onrender.com/"
+
+            if pergunta.data_liberacao == hoje:
+                texto_data = "e já está liberada para responder hoje!"
+            else:
+                data_formatada = pergunta.data_liberacao.strftime('%d/%m/%Y')
+                texto_data = f"e está agendada para ser liberada no dia {data_formatada}."
+
+            subject = "Fique atento: Nova pergunta agendada no Quiz!"
+            from_email = os.environ.get('SENDGRID_FROM_EMAIL')
+
+            if not from_email:
+                app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
+                return
+
+            for usuario in usuarios:
+                body = (f"Olá, {usuario.nome}!\n\nUma nova pergunta de conhecimento foi cadastrada {texto_data}\n\nAcesse o quiz e teste seus conhecimentos:\n{link_do_quiz}\n\nAtenciosamente,\nEquipe Quiz Produtivo")
+                thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
+                thread.start()
+            
+            flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
+        else:
+            app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
+    except Exception as e:
+        app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
+        flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -293,13 +330,10 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    
-    # Parte 1: Coleta os dados do formulário e cria o objeto da pergunta
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
-    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -311,54 +345,11 @@ def adicionar_pergunta():
         opcao_d=request.form.get('opcao_d'),
         tempo_limite=request.form['tempo_limite']
     )
-    
-    # Parte 2: Salva a pergunta no banco de dados
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
-    
-    # Parte 3: Verifica se deve enviar o e-mail de notificação
     if 'enviar_notificacao' in request.form:
-        try:
-            usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
-            if usuarios:
-                app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
-                
-                hoje = date.today()
-                data_liberacao = nova_pergunta.data_liberacao
-                link_do_quiz = "https://quiz-empresa.onrender.com/"
-
-                if data_liberacao == hoje:
-                    texto_data = "e já está liberada para responder hoje!"
-                else:
-                    data_formatada = data_liberacao.strftime('%d/%m/%Y')
-                    texto_data = f"e está agendada para ser liberada no dia {data_formatada}."
-
-                subject = "Fique atento: Nova pergunta agendada no Quiz!"
-                from_email = os.environ.get('SENDGRID_FROM_EMAIL')
-
-                if not from_email:
-                    app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
-                else:
-                    for usuario in usuarios:
-                        body = (
-                            f"Olá, {usuario.nome}!\n\n"
-                            f"Uma nova pergunta de conhecimento foi cadastrada {texto_data}\n\n"
-                            f"Acesse o quiz e teste seus conhecimentos:\n"
-                            f"{link_do_quiz}\n\n"
-                            f"Atenciosamente,\nEquipe Quiz Produtivo"
-                        )
-                        thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
-                        thread.start()
-                    
-                    flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
-            else:
-                app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
-        except Exception as e:
-            app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
-            flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
-    
-    # Parte 4: Redireciona o administrador de volta para a página de admin
+        disparar_notificacao_nova_pergunta(nova_pergunta)
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
@@ -423,58 +414,43 @@ def pagina_analytics():
 
 @app.route('/admin/import_questions', methods=['POST'])
 def importar_perguntas():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('pagina_admin'))
-
-    # Verifica se o arquivo foi enviado
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     if 'arquivo_csv' not in request.files:
         flash('Nenhum arquivo selecionado.', 'danger')
         return redirect(url_for('pagina_admin'))
-
     arquivo = request.files['arquivo_csv']
-
     if arquivo.filename == '':
         flash('Nenhum arquivo selecionado.', 'danger')
         return redirect(url_for('pagina_admin'))
-
     if arquivo and arquivo.filename.endswith('.csv'):
         success_count = 0
         error_count = 0
-        
-        # Lê o arquivo em memória para processar
         stream = io.StringIO(arquivo.stream.read().decode("UTF-8"), newline=None)
         reader = csv.DictReader(stream)
-
+        perguntas_para_notificar = []
         for row in reader:
             try:
-                # Valida e converte os dados da linha
                 data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
-                
                 nova_pergunta = Pergunta(
-                    tipo=row['tipo'],
-                    texto=row['texto'],
-                    opcao_a=row['opcao_a'] or None, # Salva como None se estiver vazio
-                    opcao_b=row['opcao_b'] or None,
-                    opcao_c=row['opcao_c'] or None,
-                    opcao_d=row['opcao_d'] or None,
-                    resposta_correta=row['resposta_correta'],
-                    data_liberacao=data_obj,
+                    tipo=row['tipo'], texto=row['texto'],
+                    opcao_a=row['opcao_a'] or None, opcao_b=row['opcao_b'] or None,
+                    opcao_c=row['opcao_c'] or None, opcao_d=row['opcao_d'] or None,
+                    resposta_correta=row['resposta_correta'], data_liberacao=data_obj,
                     tempo_limite=int(row['tempo_limite'])
                 )
                 db.session.add(nova_pergunta)
+                if row.get('enviar_notificacao', '').lower() == 'sim':
+                    perguntas_para_notificar.append(nova_pergunta)
                 success_count += 1
             except Exception as e:
-                # Se der erro em uma linha, desfaz a adição dela e continua
                 db.session.rollback()
                 error_count += 1
                 app.logger.error(f"Erro ao importar linha {reader.line_num}: {e} | Dados: {row}")
-
-        # Salva todas as perguntas válidas no banco de dados de uma vez
         db.session.commit()
-        
-        flash(f'{success_count} perguntas importadas com sucesso. {error_count} linhas falharam (verifique os logs para detalhes).', 'success')
+        for pergunta in perguntas_para_notificar:
+            disparar_notificacao_nova_pergunta(pergunta)
+        flash(f'{success_count} perguntas importadas com sucesso. {error_count} linhas falharam.', 'success')
         return redirect(url_for('pagina_admin'))
-
     else:
         flash('Formato de arquivo inválido. Por favor, envie um arquivo .csv.', 'danger')
         return redirect(url_for('pagina_admin'))
@@ -491,7 +467,7 @@ def init_db(secret_key):
         db.create_all()
         app.logger.info("Tabelas criadas. Inserindo dados iniciais...")
         dados_iniciais = {
-            "Suporte": [{'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'}, {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'}],
+            "Suporte": [{'nome': 'Ana Oliveira', 'codigo_acesso': '1234', 'email': 'ana.oliveira@empresa.com'}, {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'}],
             "Vendas": [{'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'}, {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'}]
         }
         for nome_depto, lista_usuarios in dados_iniciais.items():
@@ -510,46 +486,31 @@ def init_db(secret_key):
 # --- ROTA DE NOTIFICAÇÃO DO CRON JOB ---
 @app.route('/_send_notifications/<secret_key>')
 def trigger_email_notifications(secret_key):
-    # Para mais segurança, a chave secreta é lida das variáveis de ambiente
     expected_key = os.environ.get('NOTIFICATION_SECRET_KEY', 'sua-outra-chave-muito-secreta')
     if secret_key != expected_key:
         return "Chave secreta inválida.", 403
-
     try:
         app.logger.info("Gatilho de notificação recebido. Verificando novas perguntas...")
         hoje = date.today()
         perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
-        
         if not perguntas_de_hoje:
             app.logger.info("Nenhuma pergunta nova para hoje.")
             return "Nenhuma pergunta nova para hoje.", 200
-
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if not usuarios:
             app.logger.info("Nenhum usuário com e-mail para notificar.")
             return "Nenhum usuário com e-mail cadastrado.", 200
-        
         from_email = os.environ.get('SENDGRID_FROM_EMAIL')
         if not from_email:
             app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
             return "Erro de configuração do servidor (remetente não definido).", 500
-
         subject = "Novas perguntas disponíveis no Quiz Produtivo!"
         link_do_quiz = "https://quiz-empresa.onrender.com/"
-
         for usuario in usuarios:
-            body = (
-                f"Olá, {usuario.nome}!\n\n"
-                f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
-                f"Acesse agora e teste seus conhecimentos:\n"
-                f"{link_do_quiz}\n\n"
-                f"Atenciosamente,\nEquipe Quiz Produtivo"
-            )
+            body = (f"Olá, {usuario.nome}!\n\nTemos novas perguntas de conhecimento liberadas hoje para você responder.\n\nAcesse agora e teste seus conhecimentos:\n{link_do_quiz}\n\nAtenciosamente,\nEquipe Quiz Produtivo")
             thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
             thread.start()
-
         return f"Processo de notificação iniciado para {len(usuarios)} usuários.", 200
-
     except Exception as e:
         app.logger.error(f"Ocorreu um erro ao executar o gatilho de notificações: {e}")
         return f"Ocorreu um erro: {e}", 500

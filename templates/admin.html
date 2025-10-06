@@ -126,6 +126,7 @@
                         <li><code>opcao_a</code> a <code>opcao_d</code>: Deixe em branco para perguntas de verdadeiro/falso.</li>
                         <li><code>resposta_correta</code>: Use <code>a</code>, <code>b</code>, <code>c</code>, <code>d</code> ou <code>v</code> (verdadeiro), <code>f</code> (falso).</li>
                         <li><code>data_liberacao</code>: Use o formato <strong>DIA/MÊS/ANO</strong> (ex: <code>25/12/2025</code>).</li>
+                        <li><code>enviar_notificacao</code>: Escreva <code>sim</code> para notificar os usuários por e-mail no momento do cadastro.</li>
                     </ul>
                 </div>
                 <form action="{{ url_for('importar_perguntas') }}" method="post" enctype="multipart/form-data">
