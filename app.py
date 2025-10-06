@@ -460,7 +460,10 @@ def upload_csv():
         stream = io.StringIO(file_content, newline=None)
         
         # 2. Usa DictReader
-        reader = csv.DictReader(stream)
+        reader = csv.DictReader(stream, 
+                            delimiter=',', # Força o delimitador de vírgula
+                            skipinitialspace=True, # Ignora espaços após o delimitador
+                            restval='') # Garante que campos vazios virem string vazia, não None
         
         # 3. SALVA OS CABEÇALHOS NA SESSÃO
         headers = reader.fieldnames if reader.fieldnames else []
