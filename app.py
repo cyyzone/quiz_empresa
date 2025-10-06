@@ -421,6 +421,64 @@ def pagina_analytics():
         erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
+@app.route('/admin/import_questions', methods=['POST'])
+def importar_perguntas():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('pagina_admin'))
+
+    # Verifica se o arquivo foi enviado
+    if 'arquivo_csv' not in request.files:
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('pagina_admin'))
+
+    arquivo = request.files['arquivo_csv']
+
+    if arquivo.filename == '':
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('pagina_admin'))
+
+    if arquivo and arquivo.filename.endswith('.csv'):
+        success_count = 0
+        error_count = 0
+        
+        # Lê o arquivo em memória para processar
+        stream = io.StringIO(arquivo.stream.read().decode("UTF-8"), newline=None)
+        reader = csv.DictReader(stream)
+
+        for row in reader:
+            try:
+                # Valida e converte os dados da linha
+                data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
+                
+                nova_pergunta = Pergunta(
+                    tipo=row['tipo'],
+                    texto=row['texto'],
+                    opcao_a=row['opcao_a'] or None, # Salva como None se estiver vazio
+                    opcao_b=row['opcao_b'] or None,
+                    opcao_c=row['opcao_c'] or None,
+                    opcao_d=row['opcao_d'] or None,
+                    resposta_correta=row['resposta_correta'],
+                    data_liberacao=data_obj,
+                    tempo_limite=int(row['tempo_limite'])
+                )
+                db.session.add(nova_pergunta)
+                success_count += 1
+            except Exception as e:
+                # Se der erro em uma linha, desfaz a adição dela e continua
+                db.session.rollback()
+                error_count += 1
+                app.logger.error(f"Erro ao importar linha {reader.line_num}: {e} | Dados: {row}")
+
+        # Salva todas as perguntas válidas no banco de dados de uma vez
+        db.session.commit()
+        
+        flash(f'{success_count} perguntas importadas com sucesso. {error_count} linhas falharam (verifique os logs para detalhes).', 'success')
+        return redirect(url_for('pagina_admin'))
+
+    else:
+        flash('Formato de arquivo inválido. Por favor, envie um arquivo .csv.', 'danger')
+        return redirect(url_for('pagina_admin'))
+
 # --- ROTA DE INICIALIZAÇÃO DO BANCO DE DADOS ---
 @app.route('/_init_db/<secret_key>')
 def init_db(secret_key):
