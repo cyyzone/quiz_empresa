@@ -113,24 +113,47 @@ def disparar_notificacao_nova_pergunta(pergunta):
 
 def validar_linha_csv(row):
     errors = {}
+    
+    # Adicione checagens para garantir que o valor seja uma string (ou string vazia) antes de .lower()
+    
+    # 1. Validação do Campo 'texto'
     if not row.get('texto'):
         errors['texto'] = "O texto da pergunta não pode ser vazio."
-    tipo = row.get('tipo', '').lower()
+        
+    # 2. Validação do Campo 'tipo'
+    # Usa .get('tipo') e converte para string vazia se for None, para evitar a falha de .lower()
+    tipo = str(row.get('tipo') or '').lower() 
     if tipo not in ['multipla_escolha', 'verdadeiro_falso']:
-        errors['tipo'] = "Tipo inválido. Use 'multipla_escolha' ou 'verdadeiro_falso'."
-    resposta = row.get('resposta_correta', '').lower()
+        errors['tipo'] = "Tipo inválido ou não informado. Use 'multipla_escolha' ou 'verdadeiro_falso'."
+        
+    # 3. Validação do Campo 'resposta_correta'
+    # Usa .get('resposta_correta') e converte para string vazia se for None, para evitar a falha de .lower()
+    resposta = str(row.get('resposta_correta') or '').lower() 
     if tipo == 'multipla_escolha' and resposta not in ['a', 'b', 'c', 'd']:
         errors['resposta_correta'] = "Para múltipla escolha, a resposta deve ser a, b, c ou d."
     elif tipo == 'verdadeiro_falso' and resposta not in ['v', 'f']:
         errors['resposta_correta'] = "Para verdadeiro/falso, a resposta deve ser v ou f."
-    try:
-        datetime.strptime(row.get('data_liberacao', ''), '%d/%m/%Y').date()
-    except ValueError:
-        errors['data_liberacao'] = "Formato de data inválido. Use DD/MM/AAAA."
-    try:
-        int(row.get('tempo_limite', ''))
-    except (ValueError, TypeError):
-        errors['tempo_limite'] = "O tempo limite deve ser um número inteiro."
+        
+    # 4. Validação do Campo 'data_liberacao'
+    data_str = row.get('data_liberacao', '')
+    if not data_str:
+        errors['data_liberacao'] = "A data de liberação não pode ser vazia."
+    else:
+        try:
+            datetime.strptime(data_str, '%d/%m/%Y').date()
+        except ValueError:
+            errors['data_liberacao'] = "Formato de data inválido. Use DD/MM/AAAA."
+            
+    # 5. Validação do Campo 'tempo_limite'
+    tempo_str = row.get('tempo_limite', '')
+    if not tempo_str:
+        errors['tempo_limite'] = "O tempo limite deve ser informado."
+    else:
+        try:
+            int(tempo_str)
+        except (ValueError, TypeError):
+            errors['tempo_limite'] = "O tempo limite deve ser um número inteiro."
+            
     is_valid = not errors
     return is_valid, errors
 
@@ -507,6 +530,79 @@ def processar_importacao():
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
     flash(f'{success_count} perguntas foram importadas com sucesso!', 'success')
+    return redirect(url_for('pagina_admin'))
+
+@app.route('/admin/processar_edicao_csv', methods=['POST'])
+def processar_edicao_csv():
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+
+    headers = session.get('csv_headers', [])
+    new_validated_data = []
+    
+    # 1. Agrupar os dados do formulário por linha (index)
+    # Ex: 'row-0-texto', 'row-0-tipo', 'row-1-texto', etc.
+    rows_data = defaultdict(dict)
+    for key, value in request.form.items():
+        if key.startswith('row-'):
+            parts = key.split('-', 2)
+            row_index = int(parts[1])
+            col_name = parts[2]
+            rows_data[row_index][col_name] = value
+
+    success_count = 0
+    perguntas_para_notificar = []
+    has_unresolved_errors = False
+    
+    # 2. Revalidar e Processar
+    for row_index in sorted(rows_data.keys()):
+        row = rows_data[row_index]
+        is_valid, errors = validar_linha_csv(row)
+        
+        if is_valid:
+            # Importa a linha (Lógica do processar_importacao)
+            try:
+                data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
+                nova_pergunta = Pergunta(
+                    # Use .get() defensivamente aqui também!
+                    tipo=row['tipo'], texto=row['texto'],
+                    opcao_a=row.get('opcao_a') or None, opcao_b=row.get('opcao_b') or None,
+                    opcao_c=row.get('opcao_c') or None, opcao_d=row.get('opcao_d') or None,
+                    resposta_correta=row['resposta_correta'], data_liberacao=data_obj,
+                    tempo_limite=int(row['tempo_limite'])
+                )
+                db.session.add(nova_pergunta)
+                if row.get('enviar_notificacao', '').lower() == 'sim':
+                    perguntas_para_notificar.append(nova_pergunta)
+                success_count += 1
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"Erro fatal ao salvar linha {row_index}: {e}")
+                # Se houver um erro de banco, precisamos parar ou reverter
+                flash("Ocorreu um erro interno durante a importação. Nenhuma pergunta salva.", 'danger')
+                return redirect(url_for('pagina_admin'))
+        else:
+            # 3. Se ainda houver erro, armazena para reexibir no preview
+            has_unresolved_errors = True
+            new_validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
+
+    db.session.commit()
+    
+    # Notifica os usuários em segundo plano
+    for pergunta in perguntas_para_notificar:
+        disparar_notificacao_nova_pergunta(pergunta)
+        
+    session.pop('csv_data', None)
+    session.pop('has_valid_rows', None)
+
+    if has_unresolved_errors:
+        # Se restaram erros, armazena os dados não importados e volta para o preview
+        session['csv_data'] = new_validated_data
+        session['has_valid_rows'] = (success_count > 0)
+        flash(f'Importação parcial concluída: {success_count} perguntas salvas. Corrija os erros restantes para importar o restante.', 'warning')
+        return redirect(url_for('preview_csv'))
+        
+    flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
     return redirect(url_for('pagina_admin'))
 
 # --- ROTAS DE SERVIÇO ---

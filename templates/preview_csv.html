@@ -4,50 +4,57 @@
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 95%;">
-    <h1>Pré-visualização e Validação da Planilha</h1>
-    <p>Analisamos seu arquivo. As linhas em verde estão prontas para serem importadas. As linhas em vermelho contêm erros e serão ignoradas.</p>
+    <h1>Pré-visualização e Correção da Planilha</h1>
+    <p>Corrija os campos marcados em vermelho. Apenas as linhas que estiverem válidas na submissão serão importadas.</p>
 
-    <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
-        <table class="preview-table">
-            <thead>
-                <tr>
-                    <th>Status</th>
-                    {% for header in headers %}
-                        <th>{{ header }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in data %}
-                <tr class="{{ 'valid-row' if row.is_valid else 'invalid-row' }}">
-                    <td>
-                        {% if row.is_valid %}
-                            ✔️ Válido
-                        {% else %}
-                            ❌ Erro
-                        {% endif %}
-                    </td>
-                    {% for key in headers %}
-                        <td class="{{ 'cell-error' if key in row.errors else '' }}" title="{{ row.errors.get(key, '') }}">
-                            {{ row.data[key] }}
+    <form action="{{ url_for('processar_edicao_csv') }}" method="post">
+        
+        <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
+            <table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        {% for header in headers %}
+                            <th>{{ header }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr class="{{ 'valid-row' if row.is_valid else 'invalid-row' }}">
+                        <td>
+                            {% if row.is_valid %}
+                                ✔️ Válido
+                            {% else %}
+                                ❌ Erro
+                            {% endif %}
                         </td>
+                        
+                        {% for key in headers %}
+                            <td title="{{ row.errors.get(key, '') }}">
+                                <input type="text" 
+                                       name="row-{{ loop.index0 }}-{{ key }}" 
+                                       value="{{ row.data.get(key, '') }}"
+                                       class="form-control"
+                                       style="width: 180px;">
+                                       
+                                {% if key in row.errors %}
+                                <small style="color: darkred; font-size: 0.8em;">Erro: {{ row.errors.get(key, '') }}</small>
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
                     {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                </tbody>
+            </table>
+        </div>
 
-    <div style="margin-top: 30px;">
-        {% if has_valid_rows %}
-            <form action="{{ url_for('processar_importacao') }}" method="post" style="display: inline-block;">
-                <button type="submit" class="btn">Confirmar e Importar Linhas Válidas</button>
-            </form>
-        {% else %}
-            <p style="font-weight: bold; color: #721c24;">Nenhuma linha válida encontrada para importação. Por favor, corrija seu arquivo e tente novamente.</p>
-        {% endif %}
-        <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar</a>
-    </div>
+        <div style="margin-top: 30px;">
+            <button type="submit" class="btn">Revalidar e Importar Linhas Válidas</button>
+            
+            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar e Voltar</a>
+        </div>
 
-</div>
+    </form>
+    </div>
 {% endblock %}
