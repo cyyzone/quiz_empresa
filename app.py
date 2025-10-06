@@ -73,11 +73,7 @@ def utility_processor():
 def enviar_email_com_sendgrid_api(remetente, destinatario, assunto, corpo_texto):
     try:
         sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
-        message = Mail(
-            from_email=remetente,
-            to_emails=destinatario,
-            subject=assunto,
-            plain_text_content=corpo_texto)
+        message = Mail(from_email=remetente, to_emails=destinatario, subject=assunto, plain_text_content=corpo_texto)
         response = sg.send(message)
         app.logger.info(f"E-mail enviado via API para {destinatario}. Status: {response.status_code}")
     except Exception as e:
@@ -88,39 +84,55 @@ def send_email_async(app_context, from_email, to_email, subject, body):
         enviar_email_com_sendgrid_api(from_email, to_email, subject, body)
 
 def disparar_notificacao_nova_pergunta(pergunta):
-    """Função auxiliar para disparar e-mails para uma nova pergunta."""
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
             app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
-            
             hoje = date.today()
             link_do_quiz = "https://quiz-empresa.onrender.com/"
-
             if pergunta.data_liberacao == hoje:
                 texto_data = "e já está liberada para responder hoje!"
             else:
                 data_formatada = pergunta.data_liberacao.strftime('%d/%m/%Y')
                 texto_data = f"e está agendada para ser liberada no dia {data_formatada}."
-
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
             from_email = os.environ.get('SENDGRID_FROM_EMAIL')
-
             if not from_email:
                 app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
                 return
-
             for usuario in usuarios:
                 body = (f"Olá, {usuario.nome}!\n\nUma nova pergunta de conhecimento foi cadastrada {texto_data}\n\nAcesse o quiz e teste seus conhecimentos:\n{link_do_quiz}\n\nAtenciosamente,\nEquipe Quiz Produtivo")
                 thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
                 thread.start()
-            
             flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
         else:
             app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
     except Exception as e:
         app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
         flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
+
+def validar_linha_csv(row):
+    errors = {}
+    if not row.get('texto'):
+        errors['texto'] = "O texto da pergunta não pode ser vazio."
+    tipo = row.get('tipo', '').lower()
+    if tipo not in ['multipla_escolha', 'verdadeiro_falso']:
+        errors['tipo'] = "Tipo inválido. Use 'multipla_escolha' ou 'verdadeiro_falso'."
+    resposta = row.get('resposta_correta', '').lower()
+    if tipo == 'multipla_escolha' and resposta not in ['a', 'b', 'c', 'd']:
+        errors['resposta_correta'] = "Para múltipla escolha, a resposta deve ser a, b, c ou d."
+    elif tipo == 'verdadeiro_falso' and resposta not in ['v', 'f']:
+        errors['resposta_correta'] = "Para verdadeiro/falso, a resposta deve ser v ou f."
+    try:
+        datetime.strptime(row.get('data_liberacao', ''), '%d/%m/%Y').date()
+    except ValueError:
+        errors['data_liberacao'] = "Formato de data inválido. Use DD/MM/AAAA."
+    try:
+        int(row.get('tempo_limite', ''))
+    except (ValueError, TypeError):
+        errors['tempo_limite'] = "O tempo limite deve ser um número inteiro."
+    is_valid = not errors
+    return is_valid, errors
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -232,6 +244,9 @@ def pagina_ranking_detalhe(departamento_id):
 # --- ROTAS DE ADMIN ---
 @app.route('/admin', methods=['GET', 'POST'])
 def pagina_admin():
+    if 'csv_data' in session:
+        session.pop('csv_data', None)
+        session.pop('has_valid_rows', None)
     senha_correta = session.get('admin_logged_in', False)
     if request.method == 'POST' and not senha_correta:
         if request.form.get('senha') == SENHA_ADMIN:
@@ -264,7 +279,7 @@ def excluir_setor(departamento_id):
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     depto = Departamento.query.get_or_404(departamento_id)
     if depto.usuarios:
-        flash(f'Não é possível excluir o setor "{depto.nome}" pois ele possui usuários. Mova-os para outro setor primeiro.', 'danger')
+        flash(f'Não é possível excluir o setor "{depto.nome}" pois ele possui usuários.', 'danger')
     else:
         db.session.delete(depto)
         db.session.commit()
@@ -303,11 +318,11 @@ def atualizar_usuario(usuario_id):
     novo_email = request.form['email']
     codigo_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.codigo_acesso == novo_codigo).first()
     if codigo_existente:
-        flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso por outro usuário.', 'danger')
+        flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
     email_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first()
     if email_existente:
-        flash(f'Erro: O e-mail "{novo_email}" já está em uso por outro usuário.', 'danger')
+        flash(f'Erro: O e-mail "{novo_email}" já está em uso.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
     usuario.nome = request.form['nome']
     usuario.email = novo_email
@@ -335,15 +350,10 @@ def adicionar_pergunta():
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
     nova_pergunta = Pergunta(
-        tipo=tipo,
-        texto=request.form['texto'],
-        data_liberacao=data_obj,
-        resposta_correta=resposta_correta,
-        opcao_a=request.form.get('opcao_a'),
-        opcao_b=request.form.get('opcao_b'),
-        opcao_c=request.form.get('opcao_c'),
-        opcao_d=request.form.get('opcao_d'),
-        tempo_limite=request.form['tempo_limite']
+        tipo=tipo, texto=request.form['texto'], data_liberacao=data_obj,
+        resposta_correta=resposta_correta, opcao_a=request.form.get('opcao_a'),
+        opcao_b=request.form.get('opcao_b'), opcao_c=request.form.get('opcao_c'),
+        opcao_d=request.form.get('opcao_d'), tempo_limite=request.form['tempo_limite']
     )
     db.session.add(nova_pergunta)
     db.session.commit()
@@ -369,10 +379,7 @@ def editar_pergunta(pergunta_id):
             pergunta.opcao_c = request.form.get('opcao_c')
             pergunta.opcao_d = request.form.get('opcao_d')
         else:
-            pergunta.opcao_a = None
-            pergunta.opcao_b = None
-            pergunta.opcao_c = None
-            pergunta.opcao_d = None
+            pergunta.opcao_a, pergunta.opcao_b, pergunta.opcao_c, pergunta.opcao_d = None, None, None, None
         db.session.commit()
         flash('Pergunta atualizada com sucesso!', 'success')
         return redirect(url_for('pagina_admin'))
@@ -412,23 +419,52 @@ def pagina_analytics():
         erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
     return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
 
-@app.route('/admin/import_questions', methods=['POST'])
-def importar_perguntas():
+@app.route('/admin/upload_csv', methods=['POST'])
+def upload_csv():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     if 'arquivo_csv' not in request.files:
         flash('Nenhum arquivo selecionado.', 'danger')
         return redirect(url_for('pagina_admin'))
     arquivo = request.files['arquivo_csv']
-    if arquivo.filename == '':
-        flash('Nenhum arquivo selecionado.', 'danger')
+    if arquivo.filename == '' or not arquivo.filename.endswith('.csv'):
+        flash('Arquivo inválido ou não selecionado. Envie um .csv.', 'danger')
         return redirect(url_for('pagina_admin'))
-    if arquivo and arquivo.filename.endswith('.csv'):
-        success_count = 0
-        error_count = 0
-        stream = io.StringIO(arquivo.stream.read().decode("UTF-8"), newline=None)
+    try:
+        stream = io.StringIO(arquivo.stream.read().decode("utf-8-sig"), newline=None)
         reader = csv.DictReader(stream)
-        perguntas_para_notificar = []
+        validated_data = []
+        has_valid_rows = False
         for row in reader:
+            is_valid, errors = validar_linha_csv(row)
+            if is_valid: has_valid_rows = True
+            validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
+        session['csv_data'] = validated_data
+        session['has_valid_rows'] = has_valid_rows
+        return redirect(url_for('preview_csv'))
+    except Exception as e:
+        app.logger.error(f"Erro ao ler o arquivo CSV: {e}")
+        flash(f"Ocorreu um erro ao processar o arquivo CSV: {e}", "danger")
+        return redirect(url_for('pagina_admin'))
+
+@app.route('/admin/preview_csv')
+def preview_csv():
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    validated_data = session.get('csv_data', [])
+    has_valid_rows = session.get('has_valid_rows', False)
+    return render_template('preview_csv.html', data=validated_data, has_valid_rows=has_valid_rows)
+
+@app.route('/admin/process_import', methods=['POST'])
+def processar_importacao():
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    validated_data = session.get('csv_data', [])
+    if not validated_data:
+        flash("Nenhum dado de importação encontrado na sessão.", "danger")
+        return redirect(url_for('pagina_admin'))
+    success_count = 0
+    perguntas_para_notificar = []
+    for row_data in validated_data:
+        if row_data['is_valid']:
+            row = row_data['data']
             try:
                 data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
                 nova_pergunta = Pergunta(
@@ -444,18 +480,16 @@ def importar_perguntas():
                 success_count += 1
             except Exception as e:
                 db.session.rollback()
-                error_count += 1
-                app.logger.error(f"Erro ao importar linha {reader.line_num}: {e} | Dados: {row}")
-        db.session.commit()
-        for pergunta in perguntas_para_notificar:
-            disparar_notificacao_nova_pergunta(pergunta)
-        flash(f'{success_count} perguntas importadas com sucesso. {error_count} linhas falharam.', 'success')
-        return redirect(url_for('pagina_admin'))
-    else:
-        flash('Formato de arquivo inválido. Por favor, envie um arquivo .csv.', 'danger')
-        return redirect(url_for('pagina_admin'))
+                app.logger.error(f"Erro ao salvar linha (previamente válida): {e} | Dados: {row}")
+    db.session.commit()
+    for pergunta in perguntas_para_notificar:
+        disparar_notificacao_nova_pergunta(pergunta)
+    session.pop('csv_data', None)
+    session.pop('has_valid_rows', None)
+    flash(f'{success_count} perguntas foram importadas com sucesso!', 'success')
+    return redirect(url_for('pagina_admin'))
 
-# --- ROTA DE INICIALIZAÇÃO DO BANCO DE DADOS ---
+# --- ROTAS DE SERVIÇO ---
 @app.route('/_init_db/<secret_key>')
 def init_db(secret_key):
     expected_key = os.environ.get('INIT_DB_SECRET_KEY', 'sua-chave-secreta-dificil-de-adivinhar')
@@ -483,7 +517,6 @@ def init_db(secret_key):
         app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
 
-# --- ROTA DE NOTIFICAÇÃO DO CRON JOB ---
 @app.route('/_send_notifications/<secret_key>')
 def trigger_email_notifications(secret_key):
     expected_key = os.environ.get('NOTIFICATION_SECRET_KEY', 'sua-outra-chave-muito-secreta')

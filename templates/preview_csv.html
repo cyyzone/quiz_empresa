@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Pré-visualização da Importação{% endblock %}
+
+{% block content %}
+<div class="dashboard-container" style="max-width: 95%;">
+    <h1>Pré-visualização e Validação da Planilha</h1>
+    <p>Analisamos seu arquivo. As linhas em verde estão prontas para serem importadas. As linhas em vermelho contêm erros e serão ignoradas.</p>
+
+    <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    {% if data and data[0] %}
+                        {% for header in data[0]['data'].keys() %}
+                            <th>{{ header }}</th>
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr class="{{ 'valid-row' if row.is_valid else 'invalid-row' }}">
+                    <td>
+                        {% if row.is_valid %}
+                            ✔️ Válido
+                        {% else %}
+                            ❌ Erro
+                        {% endif %}
+                    </td>
+                    {% for key, value in row.data.items() %}
+                        <td class="{{ 'cell-error' if key in row.errors else '' }}" title="{{ row.errors.get(key, '') }}">
+                            {{ value }}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top: 30px;">
+        {% if has_valid_rows %}
+            <form action="{{ url_for('processar_importacao') }}" method="post" style="display: inline-block;">
+                <button type="submit" class="btn">Confirmar e Importar Linhas Válidas</button>
+            </form>
+        {% else %}
+            <p style="font-weight: bold; color: #721c24;">Nenhuma linha válida encontrada para importação. Por favor, corrija seu arquivo e tente novamente.</p>
+        {% endif %}
+        <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar</a>
+    </div>
+
+</div>
+{% endblock %}
