@@ -444,42 +444,57 @@ def pagina_analytics():
 
 @app.route('/admin/upload_csv', methods=['POST'])
 def upload_csv():
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    # ... (restante do código de validação do arquivo)
-    
-    arquivo = request.files['arquivo_csv']
-
-    if arquivo.filename == '' or not arquivo.filename.endswith('.csv'):
-        flash('Arquivo inválido ou não selecionado. Envie um .csv.', 'danger')
+    if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
-        
+
+    arquivo = request.files.get('arquivo_csv')
+
+    if not arquivo or arquivo.filename == '' or not arquivo.filename.lower().endswith('.csv'):
+        flash('Arquivo inválido ou não selecionado. Envie um arquivo .csv.', 'danger')
+        return redirect(url_for('pagina_admin'))
+
     try:
-        # 1. Lê todo o conteúdo do arquivo
+        # 1. Decodifica o conteúdo do arquivo com utf-8-sig para remover BOM (Byte Order Mark)
         file_content = arquivo.stream.read().decode("utf-8-sig")
         
-        # 2. Tenta "farejar" o delimitador
-        sniffer = csv.Sniffer()
+        # 2. Tenta detectar o delimitador de forma mais robusta
+        delimitador_encontrado = None
+        possiveis_delimitadores = [';', ',', '\t'] # Testa ponto e vírgula, vírgula e tab
         
-        # Usa apenas as primeiras 1024 bytes (ou menos, se o arquivo for pequeno) para adivinhar
-        dialect = sniffer.sniff(file_content[:1024]) 
+        for delim in possiveis_delimitadores:
+            # Cria um stream em memória para testar
+            stream_teste = io.StringIO(file_content)
+            reader_teste = csv.reader(stream_teste, delimiter=delim)
+            try:
+                primeira_linha = next(reader_teste)
+                # Se a primeira linha tem mais de uma coluna, encontramos o delimitador certo!
+                if len(primeira_linha) > 1:
+                    delimitador_encontrado = delim
+                    break
+            except (StopIteration, csv.Error):
+                # Se o arquivo estiver vazio ou der erro na leitura, continua tentando
+                continue
+
+        # Se mesmo após o teste manual não acharmos, tentamos o Sniffer como último recurso
+        if not delimitador_encontrado:
+             sniffer = csv.Sniffer()
+             dialect = sniffer.sniff(file_content[:1024])
+             delimitador_encontrado = dialect.delimiter
+
+        if not delimitador_encontrado:
+            # Se ainda assim não encontrarmos, lançamos um erro claro.
+            raise csv.Error("Não foi possível determinar o delimitador do arquivo. Use vírgula (,) ou ponto e vírgula (;).")
+
+        # 3. Processa o arquivo com o delimitador correto
+        stream = io.StringIO(file_content)
+        reader = csv.DictReader(stream, delimiter=delimitador_encontrado, skipinitialspace=True)
         
-        # 3. Cria o stream de memória novamente para o DictReader
-        stream = io.StringIO(file_content, newline=None)
-        
-        # 4. Usa o delimitador descoberto e outras opções de segurança
-        reader = csv.DictReader(stream, 
-                                delimiter=dialect.delimiter, # Usa o delimitador DESCOBERTO!
-                                skipinitialspace=True, 
-                                restval='') 
-        
-        # 5. SALVA OS CABEÇALHOS NA SESSÃO
         headers = reader.fieldnames if reader.fieldnames else []
         session['csv_headers'] = headers
         
         validated_data = []
         has_valid_rows = False
         
-        # 6. Processa as linhas
         for row in reader:
             is_valid, errors = validar_linha_csv(row)
             if is_valid: has_valid_rows = True
@@ -491,14 +506,13 @@ def upload_csv():
         return redirect(url_for('preview_csv'))
         
     except csv.Error as e:
-        # Trata erros específicos de CSV, como "Não foi possível adivinhar o delimitador"
-        app.logger.error(f"Erro ao processar CSV (Sniffer/Reader): {e}")
-        flash(f"Erro ao ler o arquivo CSV. O delimitador não pôde ser identificado. Certifique-se de usar vírgula (,) ou ponto e vírgula (;).", "danger")
+        app.logger.error(f"Erro de CSV ao processar o arquivo: {e}")
+        flash(str(e), "danger")
         return redirect(url_for('pagina_admin'))
         
     except Exception as e:
         app.logger.error(f"Erro geral ao ler o arquivo CSV: {e}")
-        flash(f"Ocorreu um erro inesperado ao processar o arquivo CSV: {e}", "danger")
+        flash(f"Ocorreu um erro inesperado ao processar o arquivo: {e}", "danger")
         return redirect(url_for('pagina_admin'))
     
 @app.route('/admin/preview_csv')

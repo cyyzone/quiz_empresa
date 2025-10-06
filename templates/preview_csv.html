@@ -30,22 +30,21 @@
                             {% endif %}
                         </td>
                         
-                       {% for key in headers %}
-    <td class="{{ 'cell-error' if key in row.errors else '' }}"> 
-        
-        <input type="text" 
-               name="row-{{ loop.index0 }}-{{ key }}" 
-               value="{{ row.data.get(key, '') }}"
-               class="form-control"
-               style="width: 180px;">
-        
-        {% if key in row.errors %}
-            <div style="color: darkred; font-size: 0.8em; margin-top: 5px;">
-                ❌ Erro: {{ row.errors.get(key, '') }}
-            </div>
-        {% endif %}
-    </td>
-{% endfor %}
+                        {% for key in headers %}
+                        <td class="{{ 'cell-error' if key in row.errors else '' }}"> 
+                            
+                            <input type="text" 
+                                   name="row-{{ loop.parent.loop.index0 }}-{{ key }}"  value="{{ row.data.get(key, '') }}"
+                                   class="form-control"
+                                   style="width: 180px;">
+                            
+                            {% if key in row.errors %}
+                            <div style="color: darkred; font-size: 0.8em; margin-top: 5px;">
+                                ❌ Erro: {{ row.errors.get(key, '') }}
+                            </div>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -54,10 +53,9 @@
 
         <div style="margin-top: 30px;">
             <button type="submit" class="btn">Revalidar e Importar Linhas Válidas</button>
-            
             <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar e Voltar</a>
         </div>
 
     </form>
-    </div>
+</div>
 {% endblock %}
