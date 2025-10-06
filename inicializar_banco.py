@@ -4,7 +4,7 @@ from app import app, db, Usuario, Departamento
 dados_iniciais = {
     "Suporte": [
         # MUDANÇA: Adicionado o campo 'email' para cada usuário
-        {'nome': 'Ana Oliveira', 'codigo_acesso': '1234', 'email': 'ana.oliveira@empresa.com'},
+        {'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'},
         {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'},
     ],
     "Vendas": [

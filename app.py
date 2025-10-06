@@ -7,7 +7,6 @@ from flask_mail import Mail, Message
 import os
 from threading import Thread
 
-
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
@@ -22,9 +21,7 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-# Certifique-se de ter um e-mail verificado no SendGrid para usar como remetente
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'jenycds@hotmail.com'))
-
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_SENDER_EMAIL', 'seu-email-verificado@exemplo.com'))
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
@@ -315,14 +312,11 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
-    
-    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL EM SEGUNDO PLANO ---
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
             data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
-            
             for usuario in usuarios:
                 body = (
                     f"Olá, {usuario.nome}!\n\n"
@@ -336,7 +330,6 @@ def adicionar_pergunta():
     except Exception as e:
         print(f"ERRO AO PREPARAR E-MAILS: {e}")
         flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
-    
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
