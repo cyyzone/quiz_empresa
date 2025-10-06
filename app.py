@@ -430,16 +430,31 @@ def upload_csv():
         flash('Arquivo inválido ou não selecionado. Envie um .csv.', 'danger')
         return redirect(url_for('pagina_admin'))
     try:
-        stream = io.StringIO(arquivo.stream.read().decode("utf-8-sig"), newline=None)
+        # AQUI ESTÁ A MUDANÇA
+        
+        # 1. Decodifica o arquivo para uma string
+        file_content = arquivo.stream.read().decode("utf-8-sig")
+        stream = io.StringIO(file_content, newline=None)
+        
+        # 2. Usa DictReader
         reader = csv.DictReader(stream)
+        
+        # 3. SALVA OS CABEÇALHOS NA SESSÃO
+        headers = reader.fieldnames if reader.fieldnames else []
+        session['csv_headers'] = headers
+        
         validated_data = []
         has_valid_rows = False
+        
+        # 4. Processa as linhas
         for row in reader:
             is_valid, errors = validar_linha_csv(row)
             if is_valid: has_valid_rows = True
             validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
+            
         session['csv_data'] = validated_data
         session['has_valid_rows'] = has_valid_rows
+        
         return redirect(url_for('preview_csv'))
     except Exception as e:
         app.logger.error(f"Erro ao ler o arquivo CSV: {e}")
