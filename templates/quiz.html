@@ -37,7 +37,6 @@
     const tickSound = document.getElementById('tick-sound');
     const buzzerSound = document.getElementById('buzzer-sound');
 
-    // MUDANÇA 3: A variável do timer agora pega o valor da pergunta
     let timeLeft = parseInt(timerElement.textContent);
 
     const timerInterval = setInterval(() => {
@@ -45,18 +44,32 @@
         timerElement.textContent = timeLeft;
         tempoRestanteInput.value = timeLeft;
 
-        if (timeLeft > 0) {
+        if (timeLeft > 0 && tickSound) {
             tickSound.currentTime = 0;
-            tickSound.play();
+            tickSound.play().catch(e => console.log("Erro ao tocar som de tick:", e));
         }
 
         if (timeLeft <= 0) {
-            // ... (resto do script do timer, sem mudanças) ...
+            clearInterval(timerInterval);
+            if (tickSound) tickSound.pause();
+
+            timerElement.textContent = "Esgotado!";
+            if (buzzerSound) {
+                buzzerSound.play().catch(e => console.log("Erro ao tocar som de buzzer:", e));
+            }
+
+            document.querySelectorAll('#quiz-form button').forEach(button => {
+                button.disabled = true;
+            });
+
+            setTimeout(() => {
+                formElement.submit();
+            }, 1200);
         }
     }, 1000);
 
     formElement.addEventListener('submit', () => {
-        tickSound.pause();
+        if (tickSound) tickSound.pause();
         clearInterval(timerInterval);
     });
 </script>
