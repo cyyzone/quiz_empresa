@@ -13,12 +13,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quiz.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+# --- CONFIGURAÇÕES DE E-MAIL ---
+# (Lembre-se de adicionar 'import os' no topo do seu arquivo)
+app.config['MAIL_SERVER'] = 'smtp.sendgrid.net' # Servidor do SendGrid
 app.config['MAIL_PORT'] = 465
 app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = 'jenycds8@gmail.com'  # SUBSTITUA PELO SEU E-MAIL
-app.config['MAIL_PASSWORD'] = 'mgbz mojd yqye ojrx'      # SUBSTITUA PELA SUA SENHA DE APP
-app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', 'jenycds8@gmail.com')
+# Agora, o código busca as credenciais das Variáveis de Ambiente do Render
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = ('Quiz Produtivo', os.environ.get('MAIL_USERNAME'))
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
