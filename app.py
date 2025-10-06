@@ -82,9 +82,11 @@ def send_email_async(app_context, msg):
     with app_context:
         try:
             mail.send(msg)
-            print(f"E-mail enviado em segundo plano para {msg.recipients}")
+            # Log de sucesso
+            app.logger.info(f"E-mail enviado em segundo plano para {msg.recipients}")
         except Exception as e:
-            print(f"Falha ao enviar e-mail em segundo plano: {e}")
+            # Log de erro
+            app.logger.error(f"Falha ao enviar e-mail em segundo plano: {e}")
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -294,10 +296,12 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     tipo = request.form['tipo']
     data_str = request.form['data_liberacao']
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
     resposta_correta = request.form['resposta_correta']
+    
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form['texto'],
@@ -312,11 +316,15 @@ def adicionar_pergunta():
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
+    
+    # --- INÍCIO: LÓGICA DE ENVIO DE E-MAIL EM SEGUNDO PLANO COM LOGGING ---
     try:
         usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
         if usuarios:
+            app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail.")
             data_formatada = nova_pergunta.data_liberacao.strftime('%d/%m/%Y')
             subject = "Fique atento: Nova pergunta agendada no Quiz!"
+            
             for usuario in usuarios:
                 body = (
                     f"Olá, {usuario.nome}!\n\n"
@@ -324,12 +332,20 @@ def adicionar_pergunta():
                     f"Prepare-se para testar seus conhecimentos!"
                 )
                 msg = Message(subject=subject, recipients=[usuario.email], body=body)
+                
+                # Inicia a tarefa de envio de e-mail em uma thread separada
                 thread = Thread(target=send_email_async, args=[app.app_context(), msg])
                 thread.start()
+                
             flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
+        else:
+            # Log para quando não encontra usuários
+            app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
     except Exception as e:
-        print(f"ERRO AO PREPARAR E-MAILS: {e}")
+        app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
         flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
+    
+    # A página responde IMEDIATAMENTE, sem esperar pelos e-mails.
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
