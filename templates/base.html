@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,10 +26,6 @@
             color: var(--cor-texto);
             margin: 0;
             padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 90vh;
         }
 
         /* --- Estilos das Mensagens de Feedback --- */
@@ -39,11 +34,10 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 1000;
+            z-index: 2001; /* Z-index maior que o do modal */
             width: 90%;
             max-width: 600px;
         }
-
         .alert {
             padding: 15px;
             margin-bottom: 20px;
@@ -51,32 +45,24 @@
             border-radius: 8px;
             text-align: center;
             font-weight: 700;
-            /* MUDANÇA: Posição relativa para o botão de fechar */
             position: relative;
             padding-right: 40px;
-            /* Espaço para o botão 'x' */
             opacity: 1;
             transition: opacity 0.5s ease-out;
-            /* Efeito de fade-out */
         }
-
         .alert.fade-out {
             opacity: 0;
         }
-
         .alert-success {
             color: #155724;
             background-color: #d4edda;
             border-color: #c3e6cb;
         }
-
         .alert-danger {
             color: #721c24;
             background-color: #f8d7da;
             border-color: #f5c6cb;
         }
-
-        /* MUDANÇA: Novos estilos para o botão de fechar */
         .close-alert-btn {
             position: absolute;
             top: 50%;
@@ -92,12 +78,11 @@
             padding: 0;
             line-height: 1;
         }
-
         .close-alert-btn:hover {
             opacity: 1;
         }
 
-
+        /* --- Estilos de Botões e Links --- */
         .btn {
             display: inline-block;
             text-decoration: none;
@@ -113,395 +98,224 @@
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(0, 245, 171, 0.2);
         }
-
         .btn:hover {
             background-color: var(--cor-acento-hover);
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 245, 171, 0.3);
         }
-
         .btn-secondary {
-            background-color: #e97c60;
+            background-color: #e9ecef;
             color: var(--cor-texto);
             box-shadow: none;
         }
-
         .btn-secondary:hover {
             background-color: #d8dde2;
             box-shadow: none;
         }
-
         a {
             color: var(--cor-primaria);
             font-weight: 700;
             text-decoration: none;
         }
-
         a:hover {
             text-decoration: underline;
         }
 
+        /* --- Estilos dos Contêineres Principais --- */
         .login-container,
         .dashboard-container,
         .ranking-container,
         .quiz-container {
-            background: rgb(191, 236, 201);
+            background: white;
             padding: 40px;
             border-radius: 16px;
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
             text-align: center;
+            width: 100%;
         }
-
+        
         /* --- Estilos de Formulários --- */
         input[type="password"],
         input[type="text"],
         input[type="number"],
         input[type="email"],
+        input[type="date"],
+        input[type="month"],
         textarea,
         select {
             padding: 12px;
             margin-top: 10px;
-            /* MUDANÇA 1: A largura agora é 100% para preencher o contêiner */
             width: 100%;
             border: 1px solid var(--cor-borda);
             border-radius: 8px;
             font-family: 'Nunito', sans-serif;
             font-size: 16px;
-            /* MUDANÇA 2: Boa prática para o layout funcionar melhor com 100% */
             box-sizing: border-box;
         }
 
+        /* --- Estilos Específicos de Página --- */
         .ranking-container table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
         }
-
         .ranking-container th,
         .ranking-container td {
             padding: 15px;
             text-align: left;
             border-bottom: 1px solid var(--cor-borda);
         }
-
         .ranking-container th {
             background-color: var(--cor-primaria);
             color: var(--cor-texto-claro);
             font-size: 18px;
         }
-
         .timer {
             font-size: 48px;
             font-weight: 800;
             color: var(--cor-primaria);
             margin-bottom: 20px;
         }
-
         .question {
             font-size: 24px;
             margin-bottom: 30px;
             color: var(--cor-texto);
             font-weight: 700;
-            /* MUDANÇA: Preserva as quebras de linha do texto */
             white-space: pre-line;
         }
-
         .options {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            /* MUDANÇA: Adicionamos altura fixa para as linhas dos botões */
             grid-template-rows: 80px 80px;
             gap: 15px;
         }
-
         .option-btn {
             border: none;
             color: white;
             padding: 10px 20px;
-            /* Ajustamos o padding para melhor centralização */
             font-size: 18px;
-            /* MUDANÇA: Bordas bem arredondadas */
             border-radius: 50px;
             cursor: pointer;
             transition: all 0.2s ease;
             width: 100%;
             font-weight: 700;
-            /* MUDANÇA: Centraliza o texto verticalmente e horizontalmente */
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
-            /* Garante o alinhamento para o caso de quebra de linha */
         }
-
         .option-btn:hover {
-            /* O hover agora escurece levemente o botão e o levanta */
             filter: brightness(90%);
             transform: translateY(-2px);
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
         }
-
         .option-btn:disabled {
             cursor: not-allowed;
             opacity: 0.6;
         }
-
-        /* --- MUDANÇA: Estilos para o Acordeão (Barras Expansíveis) --- */
-        .accordion-trigger {
-            background-color: #66df4e;
-            color: var(--cor-texto);
-            cursor: pointer;
-            padding: 18px;
-            width: 100%;
-            border: none;
-            text-align: left;
-            outline: none;
-            font-size: 20px;
-            font-weight: 700;
-            font-family: 'Nunito', sans-serif;
-            transition: background-color 0.4s ease;
-            border-radius: 8px;
-            margin-top: 20px;
-            position: relative;
-        }
-
-        .accordion-trigger::after {
-            content: '+';
-            color: var(--cor-primaria);
-            font-weight: bold;
-            font-size: 24px;
-            position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-        }
-
-        .accordion-trigger.active::after {
-            content: "−";
-        }
-
-        .accordion-trigger:hover,
-        .accordion-trigger.active {
-            background-color: #d8dde2;
-        }
-
-        .accordion-panel {
-            padding: 0 18px;
-            background-color: white;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out;
-            border-bottom-left-radius: 8px;
-            border-bottom-right-radius: 8px;
-        }
-
-        /* --- MUDANÇA: Estilos para a caixa de instruções de importação --- */
-        .import-instructions {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0 20px 0;
-            font-size: 14px;
-            text-align: left;
-        }
-
-        .import-instructions ul {
-            margin: 10px 0 0 0;
-            padding-left: 20px;
-        }
-
-        .import-instructions code {
-            background-color: #e9ecef;
-            padding: 2px 5px;
-            border-radius: 4px;
-            font-size: 13px;
-            overflow-wrap: break-word;
-        }
-
-        /* --- MUDANÇA: Estilos para a tabela de pré-visualização do CSV --- */
-        .preview-table {
-            text-align: left;
-            font-size: 14px;
-        }
-
-        .preview-table th,
-        .preview-table td {
-            white-space: nowrap;
-            padding: 8px 12px;
-        }
-
-        .valid-row {
-            background-color: #d4edda !important;
-            /* Verde claro */
-            color: #155724;
-        }
-
-        .invalid-row {
-            background-color: #f8d7da !important;
-            /* Vermelho claro */
-            color: #721c24;
-        }
-
-        .cell-error {
-            border: 2px solid #dc3545 !important;
-            background-color: #f5c6cb !important;
-        }
-
-        /* --- MUDANÇA: Cores para os botões do Quiz --- */
-        .options .option-btn:nth-of-type(1) {
-            background-color: #e74c3c;
-            /* Vermelho */
-        }
-
-        .options .option-btn:nth-of-type(2) {
-            background-color: #3498db;
-            /* Azul */
-        }
-
-        .options .option-btn:nth-of-type(3) {
-            background-color: #f1c40f;
-            /* Amarelo */
-        }
-
-        .options .option-btn:nth-of-type(4) {
-            background-color: #2ecc71;
-            /* Verde (diferente do da marca) */
-        }
+        .options .option-btn:nth-of-type(1) { background-color: #e74c3c; } /* Vermelho */
+        .options .option-btn:nth-of-type(2) { background-color: #3498db; } /* Azul */
+        .options .option-btn:nth-of-type(3) { background-color: #f1c40f; } /* Amarelo */
+        .options .option-btn:nth-of-type(4) { background-color: #2ecc71; } /* Verde */
+        
+        /* --- Estilos para Acordeão, Importação e Validação --- */
+        .accordion-trigger { background-color: #e9ecef; color: var(--cor-texto); cursor: pointer; padding: 18px; width: 100%; border: none; text-align: left; outline: none; font-size: 20px; font-weight: 700; font-family: 'Nunito', sans-serif; transition: background-color 0.4s ease; border-radius: 8px; margin-top: 20px; position: relative; }
+        .accordion-trigger::after { content: '+'; color: var(--cor-primaria); font-weight: bold; font-size: 24px; position: absolute; right: 20px; top: 50%; transform: translateY(-50%); }
+        .accordion-trigger.active::after { content: "−"; }
+        .accordion-trigger:hover, .accordion-trigger.active { background-color: #d8dde2; }
+        .accordion-panel { padding: 0 18px; background-color: white; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+        .import-instructions { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin: 10px 0 20px 0; font-size: 14px; text-align: left; }
+        .import-instructions ul { margin: 10px 0 0 0; padding-left: 20px; }
+        .import-instructions code { background-color: #e9ecef; padding: 2px 5px; border-radius: 4px; font-size: 13px; overflow-wrap: break-word; }
+        .preview-table { text-align: left; font-size: 14px; }
+        .preview-table th, .preview-table td { white-space: nowrap; padding: 8px 12px; }
+        .valid-row { background-color: #d4edda !important; color: #155724; }
+        .invalid-row { background-color: #f8d7da !important; color: #721c24; }
+        .cell-error { border: 2px solid #dc3545 !important; background-color: #f5c6cb !important; }
 
         /* --- Estilos para o Modal de Ajuda --- */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            max-width: 600px;
-            width: 90%;
-            position: relative;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            text-align: left;
-        }
-
-        .close-modal-btn {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            background: none;
-            border: none;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            color: #888;
-        }
-
-        .help-button {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            margin-left: 10px;
-            vertical-align: middle;
-        }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; max-width: 600px; width: 90%; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: left; }
+        .close-modal-btn { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 28px; font-weight: bold; cursor: pointer; color: #888; }
+        .help-button { display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; background-color: #6c757d; color: white; border: none; border-radius: 50%; font-weight: bold; font-size: 16px; cursor: pointer; margin-left: 10px; vertical-align: middle; padding: 0; }
     </style>
 </head>
-
 <body>
+
     <div class="alert-container">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         {% for category, message in messages %}
         <div class="alert alert-{{ category }}">
             {{ message }}
-            <button class="close-alert-btn" onclick="this.parentElement.style.display='none';">&times;</button>
+            <button class="close-alert-btn">&times;</button>
         </div>
         {% endfor %}
         {% endif %}
         {% endwith %}
     </div>
 
-    {% block content %}{% endblock %}
-
-    {% block scripts %}
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const alerts = document.querySelectorAll('.alert');
-
-            alerts.forEach(function (alert) {
-                // Define um tempo para o alerta desaparecer
-                const autoDismiss = setTimeout(function () {
-                    alert.classList.add('fade-out');
-                    // Remove o elemento da tela após a animação
-                    setTimeout(() => { alert.style.display = 'none'; }, 500);
-                }, 5000); // 5000 milissegundos = 5 segundos
-
-                // Permite fechar clicando no 'x'
-                const closeButton = alert.querySelector('.close-alert-btn');
-                if (closeButton) {
-                    closeButton.addEventListener('click', function () {
-                        clearTimeout(autoDismiss); // Cancela o desaparecimento automático
-                        alert.classList.add('fade-out');
-                        setTimeout(() => { alert.style.display = 'none'; }, 500);
-                    });
-                }
-            });
-        });
-    </script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const modal = document.getElementById('help-modal');
-        const modalContent = document.getElementById('modal-text-content');
-        const closeModalBtn = document.querySelector('.close-modal-btn');
-
-        // Função para fechar o modal
-        function closeModal() {
-            modal.style.display = 'none';
-        }
-
-        // Adiciona o evento de clique para todos os botões de ajuda
-        document.querySelectorAll('.open-help-modal').forEach(button => {
-            button.addEventListener('click', function() {
-                const helpText = this.dataset.helpText;
-                modalContent.textContent = helpText;
-                modal.style.display = 'flex';
-            });
-        });
-
-        // Fecha o modal ao clicar no 'x' ou fora da caixa
-        closeModalBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', function(event) {
-            if (event.target === modal) {
-                closeModal();
-            }
-        });
-    });
-</script>
-    {% endblock %}
+    <div style="display: flex; justify-content: center; align-items: flex-start; min-height: 90vh; padding-top: 20px; padding-bottom: 20px;">
+        {% block content %}{% endblock %}
+    </div>
 
     <div id="help-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
             <button class="close-modal-btn">&times;</button>
             <div id="modal-text-content" style="white-space: pre-line;">
-            </div>
+                </div>
         </div>
     </div>
-</body>
 
+    {% block scripts %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const alerts = document.querySelectorAll('.alert');
+                alerts.forEach(function (alert) {
+                    const autoDismiss = setTimeout(function () {
+                        alert.classList.add('fade-out');
+                        setTimeout(() => { if(alert) alert.style.display = 'none'; }, 500);
+                    }, 5000);
+                    const closeButton = alert.querySelector('.close-alert-btn');
+                    if (closeButton) {
+                        closeButton.addEventListener('click', function () {
+                            clearTimeout(autoDismiss);
+                            alert.classList.add('fade-out');
+                            setTimeout(() => { if(alert) alert.style.display = 'none'; }, 500);
+                        });
+                    }
+                });
+            });
+        </script>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const modal = document.getElementById('help-modal');
+                if (modal) {
+                    const modalContent = document.getElementById('modal-text-content');
+                    const closeModalBtn = modal.querySelector('.close-modal-btn');
+
+                    function closeModal() {
+                        if(modal) modal.style.display = 'none';
+                    }
+
+                    document.querySelectorAll('.open-help-modal').forEach(button => {
+                        button.addEventListener('click', function() {
+                            const helpText = this.dataset.helpText;
+                            modalContent.textContent = helpText;
+                            modal.style.display = 'flex';
+                        });
+                    });
+
+                    if(closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+                    modal.addEventListener('click', function(event) {
+                        if (event.target === modal) {
+                            closeModal();
+                        }
+                    });
+                }
+            });
+        </script>
+    {% endblock %}
+
+</body>
 </html>
