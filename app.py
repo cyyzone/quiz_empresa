@@ -908,5 +908,52 @@ def processar_edicao_csv():
         flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
         
     return redirect(url_for('pagina_admin'))
+
+# Em app.py, no final do arquivo
+
+# --- ROTA DE SERVIÇO PARA INICIALIZAR/RESETAR O BANCO DE DADOS LOCAL ---
+@app.route('/_init_db/<secret_key>')
+def init_db(secret_key):
+    # Use uma chave diferente da senha de admin para mais segurança
+    if secret_key != 'resetar-banco-123':
+        return "Chave secreta inválida.", 403
+    try:
+        app.logger.info("Iniciando a reinicialização do banco de dados...")
+        db.drop_all()
+        db.create_all()
+        app.logger.info("Tabelas criadas. Inserindo dados iniciais...")
+        
+        # Dados iniciais para usuários e setores
+        dados_iniciais = {
+            "Suporte": [
+                {'nome': 'Ana Oliveira', 'codigo_acesso': '1234', 'email': 'ana.oliveira@empresa.com'},
+                {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'}
+            ],
+            "Vendas": [
+                {'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'},
+                {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'}
+            ]
+        }
+        
+        for nome_depto, lista_usuarios in dados_iniciais.items():
+            novo_depto = Departamento(nome=nome_depto)
+            db.session.add(novo_depto)
+            for user_data in lista_usuarios:
+                novo_usuario = Usuario(
+                    nome=user_data['nome'], 
+                    codigo_acesso=user_data['codigo_acesso'],
+                    email=user_data['email'],
+                    departamento=novo_depto
+                )
+                db.session.add(novo_usuario)
+        
+        db.session.commit()
+        app.logger.info("Banco de dados inicializado com sucesso!")
+        return "<h1>Banco de dados inicializado com sucesso!</h1>"
+    except Exception as e:
+        app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
+        return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
+
+# Esta deve ser a última parte do seu arquivo
 if __name__ == '__main__':
     app.run(debug=True)
