@@ -705,16 +705,42 @@ def atualizar_pergunta(pergunta_id):
 
 @app.route('/admin/delete_question/<int:pergunta_id>', methods=['POST'])
 def excluir_pergunta(pergunta_id):
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+        
     pergunta = Pergunta.query.get_or_404(pergunta_id)
-    if pergunta.imagem_pergunta:
-        caminho_imagem = os.path.join(app.config['UPLOAD_FOLDER'], pergunta.imagem_pergunta)
-        if os.path.exists(caminho_imagem):
-            os.remove(caminho_imagem)
+    
+    # --- NOVA LÓGICA PARA APAGAR ARQUIVOS DO CLOUDINARY ---
+    try:
+        # 1. Apaga a imagem da pergunta, se existir
+        if pergunta.imagem_pergunta:
+            # Extrai o "public_id" da URL do Cloudinary
+            public_id = pergunta.imagem_pergunta.split('/')[-1].split('.')[0]
+            cloudinary.uploader.destroy(public_id)
+            app.logger.info(f"Imagem {public_id} excluída do Cloudinary.")
+
+        # 2. Busca todas as respostas da pergunta para apagar os anexos
+        respostas_para_excluir = Resposta.query.filter_by(pergunta_id=pergunta.id).all()
+        for resposta in respostas_para_excluir:
+            if resposta.anexo_resposta:
+                public_id_anexo = resposta.anexo_resposta.split('/')[-1].split('.')[0]
+                # Usa 'destroy' com resource_type="raw" para arquivos como PDF, DOC
+                cloudinary.uploader.destroy(public_id_anexo, resource_type="raw")
+                app.logger.info(f"Anexo {public_id_anexo} excluído do Cloudinary.")
+
+    except Exception as e:
+        app.logger.error(f"Erro ao tentar excluir arquivos do Cloudinary: {e}")
+        # Mesmo que falhe em apagar do Cloudinary, continua para apagar do banco
+    # --- FIM DA NOVA LÓGICA ---
+
+    # Apaga todas as respostas ligadas a esta pergunta no banco
     Resposta.query.filter_by(pergunta_id=pergunta.id).delete()
+    
+    # Apaga a pergunta do banco
     db.session.delete(pergunta)
     db.session.commit()
-    flash('Pergunta e todas as suas respostas foram excluídas.', 'success')
+    
+    flash('Pergunta e todas as suas respostas foram excluídas com sucesso.', 'success')
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/correcoes')
