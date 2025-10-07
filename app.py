@@ -134,8 +134,6 @@ def validar_linha(row):
     is_valid = not errors
     return is_valid, errors
 
-# Em app.py
-
 def _gerar_dados_relatorio(departamento_id=None):
     """Função auxiliar que busca e processa os dados para o relatório."""
     query = db.session.query(
@@ -144,7 +142,10 @@ def _gerar_dados_relatorio(departamento_id=None):
         func.count(Resposta.id).label('total_respostas'),
         func.sum(case((or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])), 1), else_=0)).label('respostas_corretas'),
         func.coalesce(func.sum(Resposta.pontos), 0).label('pontuacao_total')
-    ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(Usuario.id)
+    ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(
+        # MUDANÇA: Adicionamos Departamento.nome ao GROUP BY
+        Usuario.id, Departamento.nome
+    )
 
     if departamento_id:
         query = query.filter(Usuario.departamento_id == departamento_id)
