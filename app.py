@@ -31,7 +31,7 @@ cloudinary.config(
 )
 
 # --- INICIALIZAÇÕES ---
-db = SQLAlchemy(app)
+db = SQLAlchemy(app) # Crio a instância principal do SQLAlchemy e a conecto com a minha aplicação Flask (app). A variável 'db' se torna a minha principal ferramenta para interagir com o banco de dados:criar tabelas, buscar dados, salvar informações, etc.
 SENHA_ADMIN = "admin123"
 
 # --- TABELA DE LIGAÇÃO (MUITOS-PARA-MUITOS) ---
@@ -399,7 +399,7 @@ def minhas_respostas():
                            filtro_resultado=filtro_resultado)
 
 
-@@app.route('/admin/relatorios/exportar_detalhado')
+@app.route('/admin/relatorios/exportar_detalhado')
 def exportar_respostas_detalhado():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
