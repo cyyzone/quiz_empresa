@@ -10,8 +10,8 @@
         <label for="nome">Nome do Colaborador:</label><br>
         <input type="text" name="nome" style="width: 100%;" value="{{ usuario.nome }}" required><br><br>
 
-        <label for="email">E-mail:</label><br>
-        <input type="email" name="email" style="width: 100%;" value="{{ usuario.email }}" required><br><br>
+        <label for="email">E-mail (Opcional):</label><br>
+        <input type="email" name="email" value="{{ usuario.email or '' }}"><br><br>
 
         <label for="codigo_acesso">Código de Acesso (4 dígitos):</label><br>
         <input type="text" name="codigo_acesso" maxlength="4" style="width: 100%;" value="{{ usuario.codigo_acesso }}" required><br><br>

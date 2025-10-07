@@ -1,27 +1,42 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func, case
+from sqlalchemy import or_
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 import os
-from threading import Thread
-import sendgrid
-from sendgrid.helpers.mail import Mail
-import csv
 import io
-import pandas as pd # Biblioteca para manipulação de planilhas Excel
-
+import pandas as pd
+from werkzeug.utils import secure_filename
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
-app.config['SECRET_KEY'] = 'uma-chave-secreta-muito-dificil'
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# Para o Render, estas chaves virão das Variáveis de Ambiente
+# Para o modo local, o app.config abaixo funcionará
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'uma-chave-secreta-local-muito-dificil')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'}
+
+# --- CONFIGURAÇÃO DO CLOUDINARY (Lê das Variáveis de Ambiente) ---
+cloudinary.config(
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key = os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
+)
 
 # --- INICIALIZAÇÕES ---
 db = SQLAlchemy(app)
 SENHA_ADMIN = "admin123"
+
+# --- TABELA DE LIGAÇÃO (MUITOS-PARA-MUITOS) ---
+pergunta_departamento_association = db.Table('pergunta_departamento',
+    db.Column('pergunta_id', db.Integer, db.ForeignKey('pergunta.id'), primary_key=True),
+    db.Column('departamento_id', db.Integer, db.ForeignKey('departamento.id'), primary_key=True)
+)
 
 # --- MODELOS DO BANCO DE DADOS ---
 class Departamento(db.Model):
@@ -32,7 +47,7 @@ class Departamento(db.Model):
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
     codigo_acesso = db.Column(db.String(4), unique=True, nullable=False)
     departamento_id = db.Column(db.Integer, db.ForeignKey('departamento.id'), nullable=False)
     respostas = db.relationship('Resposta', backref='usuario', lazy=True)
@@ -45,20 +60,32 @@ class Pergunta(db.Model):
     opcao_b = db.Column(db.String(500), nullable=True)
     opcao_c = db.Column(db.String(500), nullable=True)
     opcao_d = db.Column(db.String(500), nullable=True)
-    resposta_correta = db.Column(db.String(1), nullable=False)
+    resposta_correta = db.Column(db.String(1), nullable=True)
     data_liberacao = db.Column(db.Date, nullable=False)
-    tempo_limite = db.Column(db.Integer, nullable=False, default=30)
+    tempo_limite = db.Column(db.Integer, nullable=True)
+    imagem_pergunta = db.Column(db.String(300), nullable=True)
+    para_todos_setores = db.Column(db.Boolean, default=False, nullable=False)
+    departamentos = db.relationship('Departamento', secondary=pergunta_departamento_association, lazy='subquery',
+        backref=db.backref('perguntas', lazy=True))
 
 class Resposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    pontos = db.Column(db.Integer, nullable=False)
+    pontos = db.Column(db.Integer, nullable=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False)
-    resposta_dada = db.Column(db.String(1), nullable=False)
+    resposta_dada = db.Column(db.String(1), nullable=True)
     data_resposta = db.Column(db.DateTime, default=datetime.utcnow)
     pergunta = db.relationship('Pergunta')
+    texto_discursivo = db.Column(db.Text, nullable=True)
+    anexo_resposta = db.Column(db.String(300), nullable=True)
+    status_correcao = db.Column(db.String(20), nullable=False, default='nao_respondido')
+    feedback_admin = db.Column(db.Text, nullable=True)
+    feedback_visto = db.Column(db.Boolean, default=False, nullable=False)
 
 # --- FUNÇÕES AUXILIARES ---
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
 def get_texto_da_opcao(pergunta, opcao):
     if opcao == 'a': return pergunta.opcao_a
     if opcao == 'b': return pergunta.opcao_b
@@ -72,90 +99,28 @@ def get_texto_da_opcao(pergunta, opcao):
 def utility_processor():
     return dict(get_texto_da_opcao=get_texto_da_opcao)
 
-def enviar_email_com_sendgrid_api(remetente, destinatario, assunto, corpo_texto):
-    try:
-        sg = sendgrid.SendGridAPIClient(api_key=os.environ.get('SENDGRID_API_KEY'))
-        message = Mail(from_email=remetente, to_emails=destinatario, subject=assunto, plain_text_content=corpo_texto)
-        response = sg.send(message)
-        app.logger.info(f"E-mail enviado via API para {destinatario}. Status: {response.status_code}")
-    except Exception as e:
-        app.logger.error(f"Falha ao enviar e-mail via API para {destinatario}: {e}")
-
-def send_email_async(app_context, from_email, to_email, subject, body):
-    with app_context:
-        enviar_email_com_sendgrid_api(from_email, to_email, subject, body)
-
-def disparar_notificacao_nova_pergunta(pergunta):
-    try:
-        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
-        if usuarios:
-            app.logger.info(f"Encontrados {len(usuarios)} usuários. Iniciando threads de e-mail via API.")
-            hoje = date.today()
-            link_do_quiz = "https://quiz-empresa.onrender.com/"
-            if pergunta.data_liberacao == hoje:
-                texto_data = "e já está liberada para responder hoje!"
-            else:
-                data_formatada = pergunta.data_liberacao.strftime('%d/%m/%Y')
-                texto_data = f"e está agendada para ser liberada no dia {data_formatada}."
-            subject = "Fique atento: Nova pergunta agendada no Quiz!"
-            from_email = os.environ.get('SENDGRID_FROM_EMAIL')
-            if not from_email:
-                app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
-                return
-            for usuario in usuarios:
-                body = (f"Olá, {usuario.nome}!\n\nUma nova pergunta de conhecimento foi cadastrada {texto_data}\n\nAcesse o quiz e teste seus conhecimentos:\n{link_do_quiz}\n\nAtenciosamente,\nEquipe Quiz Produtivo")
-                thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
-                thread.start()
-            flash(f'Envio de notificação iniciado para {len(usuarios)} usuários.', 'success')
-        else:
-            app.logger.info("Nenhum usuário com e-mail encontrado para notificar.")
-    except Exception as e:
-        app.logger.error(f"ERRO AO PREPARAR E-MAILS: {e}")
-        flash('Pergunta salva, mas ocorreu um erro ao iniciar o envio de notificações.', 'danger')
-
-def validar_linha_csv(row):
+def validar_linha(row):
     errors = {}
-    
-    # Adicione checagens para garantir que o valor seja uma string (ou string vazia) antes de .lower()
-    
-    # 1. Validação do Campo 'texto'
-    if not row.get('texto'):
-        errors['texto'] = "O texto da pergunta não pode ser vazio."
-        
-    # 2. Validação do Campo 'tipo'
-    # Usa .get('tipo') e converte para string vazia se for None, para evitar a falha de .lower()
-    tipo = str(row.get('tipo') or '').lower() 
-    if tipo not in ['multipla_escolha', 'verdadeiro_falso']:
-        errors['tipo'] = "Tipo inválido ou não informado. Use 'multipla_escolha' ou 'verdadeiro_falso'."
-        
-    # 3. Validação do Campo 'resposta_correta'
-    # Usa .get('resposta_correta') e converte para string vazia se for None, para evitar a falha de .lower()
-    resposta = str(row.get('resposta_correta') or '').lower() 
+    if not row.get('texto'): errors['texto'] = "O texto não pode ser vazio."
+    tipo = str(row.get('tipo') or '').lower()
+    if tipo not in ['multipla_escolha', 'verdadeiro_falso', 'discursiva']:
+        errors['tipo'] = "Tipo inválido."
+    resposta = str(row.get('resposta_correta') or '').lower()
     if tipo == 'multipla_escolha' and resposta not in ['a', 'b', 'c', 'd']:
-        errors['resposta_correta'] = "Para múltipla escolha, a resposta deve ser a, b, c ou d."
+        errors['resposta_correta'] = "Deve ser a, b, c ou d."
     elif tipo == 'verdadeiro_falso' and resposta not in ['v', 'f']:
-        errors['resposta_correta'] = "Para verdadeiro/falso, a resposta deve ser v ou f."
-        
-    # 4. Validação do Campo 'data_liberacao'
-    data_str = row.get('data_liberacao', '')
-    if not data_str:
-        errors['data_liberacao'] = "A data de liberação não pode ser vazia."
-    else:
+        errors['resposta_correta'] = "Deve ser v ou f."
+    try:
+        if isinstance(row.get('data_liberacao'), datetime):
+             row['data_liberacao'] = row['data_liberacao'].strftime('%d/%m/%Y')
+        datetime.strptime(str(row.get('data_liberacao', '')), '%d/%m/%Y').date()
+    except (ValueError, TypeError):
+        errors['data_liberacao'] = "Formato inválido. Use DD/MM/AAAA."
+    if tipo != 'discursiva':
         try:
-            datetime.strptime(data_str, '%d/%m/%Y').date()
-        except ValueError:
-            errors['data_liberacao'] = "Formato de data inválido. Use DD/MM/AAAA."
-            
-    # 5. Validação do Campo 'tempo_limite'
-    tempo_str = row.get('tempo_limite', '')
-    if not tempo_str:
-        errors['tempo_limite'] = "O tempo limite deve ser informado."
-    else:
-        try:
-            int(tempo_str)
+            int(float(row.get('tempo_limite', '')))
         except (ValueError, TypeError):
-            errors['tempo_limite'] = "O tempo limite deve ser um número inteiro."
-            
+            errors['tempo_limite'] = "Deve ser um número."
     is_valid = not errors
     return is_valid, errors
 
@@ -170,17 +135,59 @@ def processa_login():
     codigo_inserido = request.form['codigo']
     usuario = Usuario.query.filter_by(codigo_acesso=codigo_inserido).first()
     if usuario:
-        session['usuario_id'] = usuario.id
-        session['usuario_nome'] = usuario.nome
+        session['usuario_id'], session['usuario_nome'] = usuario.id, usuario.nome
         return redirect(url_for('dashboard'))
     else:
         flash('Código de acesso inválido!', 'danger')
         return redirect(url_for('pagina_login'))
 
+
 @app.route('/dashboard')
 def dashboard():
-    if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
-    return render_template('dashboard.html', nome=session['usuario_nome'])
+    if 'usuario_id' not in session: 
+        return redirect(url_for('pagina_login'))
+
+    usuario_id = session['usuario_id']
+    usuario = Usuario.query.get(usuario_id)
+    hoje = date.today()
+    
+    perguntas_respondidas_ids = [r.pergunta_id for r in Resposta.query.filter_by(usuario_id=usuario_id).all()]
+    
+    # Contagem de Quiz Rápido Pendente (sem mudanças)
+    contagem_quiz_pendente = Pergunta.query.filter(
+        Pergunta.tipo != 'discursiva',
+        Pergunta.data_liberacao <= hoje,
+        Pergunta.id.notin_(perguntas_respondidas_ids),
+        or_(
+            Pergunta.para_todos_setores == True,
+            Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
+        )
+    ).count()
+
+    # Contagem de Atividades Discursivas Pendentes (sem mudanças)
+    contagem_atividades_pendentes = Pergunta.query.filter(
+        Pergunta.tipo == 'discursiva',
+        Pergunta.data_liberacao <= hoje,
+        Pergunta.id.notin_(perguntas_respondidas_ids),
+        or_(
+            Pergunta.para_todos_setores == True,
+            Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
+        )
+    ).count()
+
+    # MUDANÇA: Contagem de feedbacks agora verifica a nova coluna 'feedback_visto'
+    contagem_novos_feedbacks = Resposta.query.join(Pergunta).filter(
+        Resposta.usuario_id == usuario_id,
+        Pergunta.tipo == 'discursiva',
+        Resposta.status_correcao.in_(['correto', 'incorreto']),
+        Resposta.feedback_visto == False  # Só conta se ainda não foi visto
+    ).count()
+    
+    return render_template('dashboard.html', 
+                           nome=session['usuario_nome'],
+                           contagem_quiz=contagem_quiz_pendente,
+                           contagem_atividades=contagem_atividades_pendentes,
+                           contagem_feedbacks=contagem_novos_feedbacks)
 
 @app.route('/logout')
 def logout():
@@ -191,65 +198,198 @@ def logout():
 def pagina_quiz():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
     usuario_id = session['usuario_id']
+    usuario = Usuario.query.get(usuario_id)
     hoje = date.today()
     perguntas_respondidas_ids = [r.pergunta_id for r in Resposta.query.filter_by(usuario_id=usuario_id).all()]
     proxima_pergunta = Pergunta.query.filter(
+        Pergunta.tipo != 'discursiva',
         Pergunta.data_liberacao <= hoje,
-        Pergunta.id.notin_(perguntas_respondidas_ids)
+        Pergunta.id.notin_(perguntas_respondidas_ids),
+        or_(
+            Pergunta.para_todos_setores == True,
+            Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
+        )
     ).order_by(Pergunta.data_liberacao).first()
     if proxima_pergunta:
         return render_template('quiz.html', pergunta=proxima_pergunta)
     else:
-        flash('Parabéns, você respondeu todas as perguntas disponíveis!', 'success')
-        return redirect(url_for('pagina_ranking'))
+        flash('Parabéns, você respondeu todas as perguntas de quiz rápido disponíveis para o seu setor!', 'success')
+        return redirect(url_for('dashboard'))
+
+@app.route('/atividades')
+def pagina_atividades():
+    if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
+    hoje = date.today()
+    usuario_id = session['usuario_id']
+    usuario = Usuario.query.get(usuario_id)
+    atividades = Pergunta.query.filter(
+        Pergunta.tipo == 'discursiva',
+        Pergunta.data_liberacao <= hoje,
+        or_(
+            Pergunta.para_todos_setores == True,
+            Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
+        )
+    ).order_by(Pergunta.data_liberacao.desc()).all()
+    respostas_dadas = {r.pergunta_id: r for r in Resposta.query.filter_by(usuario_id=usuario_id).all()}
+    return render_template('atividades.html', atividades=atividades, respostas_dadas=respostas_dadas)
+
+# Dentro de app.py
+
+@app.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
+def responder_atividade(pergunta_id):
+    if 'usuario_id' not in session: 
+        return redirect(url_for('pagina_login'))
+
+    pergunta = Pergunta.query.get_or_404(pergunta_id)
+
+    if request.method == 'POST':
+        texto_resposta = request.form['texto_discursivo']
+        
+        # ====================================================================
+        # A LÓGICA PARA PROCESSAR O ANEXO ESTÁ AQUI
+        # ====================================================================
+        anexo_url = None # 1. Começa sem anexo por padrão.
+        
+        if 'anexo_resposta' in request.files: # 2. Verifica se um arquivo foi enviado.
+            file = request.files['anexo_resposta']
+            if file and file.filename != '' and allowed_file(file.filename):
+                # 3. Envia o arquivo para o Cloudinary de forma segura.
+                #    'resource_type="auto"' permite enviar PDFs, Docs, etc., além de imagens.
+                upload_result = cloudinary.uploader.upload(file, resource_type="auto")
+                # 4. Pega a URL segura que o Cloudinary devolveu.
+                anexo_url = upload_result.get('secure_url')
+        # ====================================================================
+
+        # 5. Salva a resposta no banco de dados com o link do anexo (ou None se não houver).
+        nova_resposta = Resposta(
+            usuario_id=session['usuario_id'],
+            pergunta_id=pergunta.id,
+            texto_discursivo=texto_resposta,
+            anexo_resposta=anexo_url, # <-- A URL é salva aqui
+            status_correcao='pendente'
+        )
+        db.session.add(nova_resposta)
+        db.session.commit()
+        
+        flash('Sua resposta foi enviada para avaliação!', 'success')
+        return redirect(url_for('pagina_atividades'))
+
+    # Se a requisição for GET, apenas mostra a página.
+    return render_template('atividade_responder.html', pergunta=pergunta)
 
 @app.route('/responder', methods=['POST'])
 def processa_resposta():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
     pergunta_id = request.form['pergunta_id']
     resposta_usuario = request.form.get('resposta', '')
-    tempo_restante = float(request.form['tempo_restante'])
     pergunta = Pergunta.query.get(pergunta_id)
     pontos = 0
     if pergunta.resposta_correta == resposta_usuario:
+        tempo_restante = float(request.form['tempo_restante'])
         pontos = 100 + int(tempo_restante * 5)
         flash(f'Resposta correta! Você ganhou {pontos} pontos.', 'success')
     else:
         flash('Resposta incorreta. Sem pontos desta vez.', 'danger')
-    nova_resposta = Resposta(pontos=pontos, usuario_id=session['usuario_id'], pergunta_id=pergunta_id, resposta_dada=resposta_usuario)
+    nova_resposta = Resposta(
+        pontos=pontos, 
+        usuario_id=session['usuario_id'], 
+        pergunta_id=pergunta_id, 
+        resposta_dada=resposta_usuario, 
+        status_correcao='correto' if pontos > 0 else 'incorreto'
+    )
     db.session.add(nova_resposta)
     db.session.commit()
     return redirect(url_for('pagina_quiz'))
 
-@app.route('/meus-erros')
-def meus_erros():
-    if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
+# Em app.py
+
+@app.route('/minhas-respostas')
+def minhas_respostas():
+    if 'usuario_id' not in session: 
+        return redirect(url_for('pagina_login'))
+
     usuario_id = session['usuario_id']
-    respostas_erradas = Resposta.query.filter_by(usuario_id=usuario_id, pontos=0).join(Pergunta).order_by(Pergunta.id.desc()).all()
-    erros_detalhados = []
-    for r in respostas_erradas:
-        erros_detalhados.append({
-            'pergunta_texto': r.pergunta.texto,
-            'sua_resposta_letra': r.resposta_dada,
-            'sua_resposta_texto': get_texto_da_opcao(r.pergunta, r.resposta_dada),
-            'resposta_correta_letra': r.pergunta.resposta_correta,
-            'resposta_correta_texto': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
-        })
-    return render_template('meus_erros.html', erros=erros_detalhados)
+
+    # --- INÍCIO DA NOVA LÓGICA: Marcar feedbacks como vistos ---
+    # Esta ação acontece toda vez que o usuário visita a página, "limpando" os avisos.
+    feedbacks_nao_vistos = Resposta.query.join(Pergunta).filter(
+        Resposta.usuario_id == usuario_id,
+        Pergunta.tipo == 'discursiva',
+        Resposta.status_correcao.in_(['correto', 'incorreto']),
+        Resposta.feedback_visto == False
+    ).all()
+
+    if feedbacks_nao_vistos:
+        for resposta in feedbacks_nao_vistos:
+            resposta.feedback_visto = True
+        db.session.commit()
+    # --- FIM DA NOVA LÓGICA ---
+    
+    # Pega os valores dos filtros da URL (se existirem)
+    filtro_tipo = request.args.get('filtro_tipo', '')
+    filtro_resultado = request.args.get('filtro_resultado', '')
+
+    # Começa a busca base, pegando apenas as respostas do usuário logado
+    query = Resposta.query.filter_by(usuario_id=usuario_id)
+
+    # Aplica o filtro de TIPO DE PERGUNTA, se selecionado
+    if filtro_tipo:
+        query = query.join(Pergunta).filter(Pergunta.tipo == filtro_tipo)
+
+    # Aplica o filtro de RESULTADO, se selecionado
+    if filtro_resultado == 'corretas':
+        # Uma resposta é correta se os pontos forem > 0 (objetivas) OU o status for 'correto' (discursivas)
+        query = query.filter(or_(Resposta.pontos > 0, Resposta.status_correcao == 'correto'))
+    elif filtro_resultado == 'incorretas':
+        # É incorreta se os pontos forem 0 (objetivas) OU o status for 'incorreto' (discursivas)
+        query = query.filter(or_(Resposta.pontos == 0, Resposta.status_correcao == 'incorreto'))
+    elif filtro_resultado == 'pendentes':
+        # Apenas para discursivas aguardando avaliação
+        query = query.filter(Resposta.status_correcao == 'pendente')
+    
+    # Executa a busca final com os filtros e ordena pelas mais recentes
+    respostas_usuario = query.order_by(Resposta.data_resposta.desc()).all()
+
+    return render_template('minhas_respostas.html', 
+                           respostas=respostas_usuario,
+                           filtro_tipo=filtro_tipo,
+                           filtro_resultado=filtro_resultado)
 
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
 def pagina_ranking():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
-    pontos_por_depto = db.session.query(Departamento.nome, func.sum(Resposta.pontos).label('pontos_totais')).join(Usuario, Departamento.id == Usuario.departamento_id).join(Resposta, Usuario.id == Resposta.usuario_id).group_by(Departamento.nome).all()
-    usuarios_por_depto = db.session.query(Departamento.id, Departamento.nome, func.count(Usuario.id).label('num_usuarios')).join(Usuario, Departamento.id == Usuario.departamento_id).group_by(Departamento.id, Departamento.nome).all()
+
+    # MUDANÇA: Usamos func.coalesce para garantir que a soma nunca seja None
+    pontos_por_depto = db.session.query(
+        Departamento.nome,
+        func.coalesce(func.sum(Resposta.pontos), 0).label('pontos_totais')
+    ).join(Usuario, Departamento.id == Usuario.departamento_id).join(Resposta, Usuario.id == Resposta.usuario_id).group_by(Departamento.nome).all()
+
+    usuarios_por_depto = db.session.query(
+        Departamento.id, 
+        Departamento.nome,
+        func.count(Usuario.id).label('num_usuarios')
+    ).join(Usuario, Departamento.id == Usuario.departamento_id).group_by(Departamento.id, Departamento.nome).all()
+
     ranking_final = []
     pontos_dict = dict(pontos_por_depto)
+    
     for depto_id, depto_nome, num_usuarios in usuarios_por_depto:
+        # Agora, a busca a partir de 'pontos_dict' sempre retornará um número
         pontos_totais = pontos_dict.get(depto_nome, 0)
         pontuacao_proporcional = pontos_totais / num_usuarios if num_usuarios > 0 else 0
-        ranking_final.append({'id': depto_id, 'nome': depto_nome, 'pontos_totais': pontos_totais, 'num_usuarios': num_usuarios, 'pontuacao_proporcional': round(pontuacao_proporcional)})
+        
+        ranking_final.append({
+            'id': depto_id, 
+            'nome': depto_nome, 
+            'pontos_totais': pontos_totais, 
+            'num_usuarios': num_usuarios, 
+            'pontuacao_proporcional': round(pontuacao_proporcional)
+        })
+        
     ranking_final.sort(key=lambda x: x['pontuacao_proporcional'], reverse=True)
+    
     return render_template('ranking.html', ranking=ranking_final)
 
 @app.route('/ranking/<int:departamento_id>')
@@ -267,11 +407,15 @@ def pagina_ranking_detalhe(departamento_id):
     return render_template('ranking_detalhe.html', departamento=departamento, ranking=ranking_final)
 
 # --- ROTAS DE ADMIN ---
+# Em app.py
+
 @app.route('/admin', methods=['GET', 'POST'])
 def pagina_admin():
     if 'csv_data' in session:
         session.pop('csv_data', None)
         session.pop('has_valid_rows', None)
+        session.pop('csv_headers', None)
+
     senha_correta = session.get('admin_logged_in', False)
     if request.method == 'POST' and not senha_correta:
         if request.form.get('senha') == SENHA_ADMIN:
@@ -279,12 +423,65 @@ def pagina_admin():
             senha_correta = True
         else:
             flash('Senha incorreta!', 'danger')
+    
     perguntas, usuarios, departamentos = [], [], []
+    contagem_pendentes = 0
+    
+    # Dicionário para passar os valores dos filtros de volta para o template
+    filtros_ativos = {}
+
     if senha_correta:
-        perguntas = Pergunta.query.order_by(Pergunta.data_liberacao.desc(), Pergunta.id.desc()).all()
+        # Busca inicial de dados para os formulários
         usuarios = Usuario.query.join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
         departamentos = Departamento.query.order_by(Departamento.nome).all()
-    return render_template('admin.html', senha_correta=senha_correta, perguntas=perguntas, usuarios=usuarios, departamentos=departamentos)
+        contagem_pendentes = Resposta.query.join(Pergunta).filter(Pergunta.tipo == 'discursiva', Resposta.status_correcao == 'pendente').count()
+
+        # --- INÍCIO DA NOVA LÓGICA DE FILTRAGEM DE PERGUNTAS ---
+        
+        # 1. Começa com uma busca base para todas as perguntas
+        query_perguntas = Pergunta.query
+
+        # 2. Pega os valores dos filtros da URL (se existirem)
+        filtro_mes = request.args.get('filtro_mes') # Ex: '2025-10'
+        filtro_setor_id = request.args.get('filtro_setor', type=int)
+        filtro_tipo = request.args.get('filtro_tipo')
+
+        # 3. Aplica os filtros na busca, um por um
+        if filtro_mes:
+            try:
+                ano, mes = map(int, filtro_mes.split('-'))
+                query_perguntas = query_perguntas.filter(
+                    db.extract('year', Pergunta.data_liberacao) == ano,
+                    db.extract('month', Pergunta.data_liberacao) == mes
+                )
+                filtros_ativos['mes'] = filtro_mes
+            except:
+                pass # Ignora filtro de data mal formatado
+
+        if filtro_setor_id:
+            query_perguntas = query_perguntas.filter(
+                or_(
+                    Pergunta.para_todos_setores == True,
+                    Pergunta.departamentos.any(Departamento.id == filtro_setor_id)
+                )
+            )
+            filtros_ativos['setor_id'] = filtro_setor_id
+
+        if filtro_tipo:
+            query_perguntas = query_perguntas.filter(Pergunta.tipo == filtro_tipo)
+            filtros_ativos['tipo'] = filtro_tipo
+
+        # 4. Executa a busca final com os filtros aplicados
+        perguntas = query_perguntas.order_by(Pergunta.data_liberacao.desc(), Pergunta.id.desc()).all()
+        # --- FIM DA NOVA LÓGICA DE FILTRAGEM ---
+
+    return render_template('admin.html', 
+                           senha_correta=senha_correta, 
+                           perguntas=perguntas, 
+                           usuarios=usuarios, 
+                           departamentos=departamentos,
+                           contagem_pendentes=contagem_pendentes,
+                           filtros=filtros_ativos) # Envia os filtros ativos para o template
 
 @app.route('/admin/add_department', methods=['POST'])
 def adicionar_setor():
@@ -314,15 +511,25 @@ def excluir_setor(departamento_id):
 @app.route('/admin/add_user', methods=['POST'])
 def adicionar_usuario():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     codigo = request.form['codigo_acesso']
-    email = request.form['email']
+    email = request.form.get('email') # Usamos .get() para não dar erro se for vazio
+
     if Usuario.query.filter_by(codigo_acesso=codigo).first():
         flash(f'Erro: O código de acesso "{codigo}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
-    if Usuario.query.filter_by(email=email).first():
+    
+    # MUDANÇA: A verificação de e-mail agora só acontece se um e-mail for digitado
+    if email and Usuario.query.filter_by(email=email).first():
         flash(f'Erro: O e-mail "{email}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
-    novo_usuario = Usuario(nome=request.form['nome'], email=email, codigo_acesso=codigo, departamento_id=request.form['departamento_id'])
+        
+    novo_usuario = Usuario(
+        nome=request.form['nome'],
+        email=email or None, # Salva None se o campo estiver vazio
+        codigo_acesso=codigo,
+        departamento_id=request.form['departamento_id']
+    )
     db.session.add(novo_usuario)
     db.session.commit()
     flash('Usuário adicionado com sucesso!', 'success')
@@ -338,21 +545,26 @@ def editar_usuario(usuario_id):
 @app.route('/admin/edit_user/<int:usuario_id>', methods=['POST'])
 def atualizar_usuario(usuario_id):
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     usuario = Usuario.query.get_or_404(usuario_id)
     novo_codigo = request.form['codigo_acesso']
-    novo_email = request.form['email']
+    novo_email = request.form.get('email')
+
     codigo_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.codigo_acesso == novo_codigo).first()
     if codigo_existente:
-        flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso.', 'danger')
+        flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
-    email_existente = Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first()
-    if email_existente:
-        flash(f'Erro: O e-mail "{novo_email}" já está em uso.', 'danger')
+
+    # MUDANÇA: A verificação de e-mail agora só acontece se um e-mail for digitado
+    if novo_email and Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first():
+        flash(f'Erro: O e-mail "{novo_email}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
+
     usuario.nome = request.form['nome']
-    usuario.email = novo_email
+    usuario.email = novo_email or None # Salva None se o campo estiver vazio
     usuario.codigo_acesso = novo_codigo
     usuario.departamento_id = request.form['departamento_id']
+    
     db.session.commit()
     flash(f'Usuário "{usuario.nome}" atualizado com sucesso!', 'success')
     return redirect(url_for('pagina_admin'))
@@ -370,62 +582,201 @@ def excluir_usuario(usuario_id):
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    tipo = request.form['tipo']
-    data_str = request.form['data_liberacao']
+    
+    tipo = request.form.get('tipo')
+    data_str = request.form.get('data_liberacao')
     data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
-    resposta_correta = request.form['resposta_correta']
+
     nova_pergunta = Pergunta(
-        tipo=tipo, texto=request.form['texto'], data_liberacao=data_obj,
-        resposta_correta=resposta_correta, opcao_a=request.form.get('opcao_a'),
-        opcao_b=request.form.get('opcao_b'), opcao_c=request.form.get('opcao_c'),
-        opcao_d=request.form.get('opcao_d'), tempo_limite=request.form['tempo_limite']
+        tipo=tipo,
+        texto=request.form.get('texto'),
+        data_liberacao=data_obj
     )
+
+    # =========================================================
+    # LÓGICA CORRIGIDA PARA USAR O CLOUDINARY
+    # =========================================================
+    if 'imagem_pergunta' in request.files:
+        file = request.files['imagem_pergunta']
+        if file and file.filename != '' and allowed_file(file.filename):
+            # Envia o arquivo para a nuvem do Cloudinary
+            upload_result = cloudinary.uploader.upload(file, folder="perguntas")
+            # Pega a URL segura que o Cloudinary devolveu
+            imagem_url = upload_result.get('secure_url')
+            # Salva essa URL no banco de dados
+            nova_pergunta.imagem_pergunta = imagem_url
+    # =========================================================
+
+    if 'para_todos_setores' in request.form:
+        nova_pergunta.para_todos_setores = True
+    else:
+        nova_pergunta.para_todos_setores = False
+        departamento_ids = request.form.getlist('departamentos')
+        if departamento_ids:
+            departamentos_selecionados = Departamento.query.filter(Departamento.id.in_(departamento_ids)).all()
+            nova_pergunta.departamentos = departamentos_selecionados
+    
+    if tipo in ['multipla_escolha', 'verdadeiro_falso']:
+        nova_pergunta.resposta_correta = request.form.get('resposta_correta')
+        nova_pergunta.tempo_limite = request.form.get('tempo_limite')
+        if tipo == 'multipla_escolha':
+            nova_pergunta.opcao_a, nova_pergunta.opcao_b, nova_pergunta.opcao_c, nova_pergunta.opcao_d = request.form.get('opcao_a'), request.form.get('opcao_b'), request.form.get('opcao_c'), request.form.get('opcao_d')
+    else: # Discursiva ou V/F (opções são nulas)
+        nova_pergunta.tempo_limite, nova_pergunta.resposta_correta = None, None
+        if tipo == 'discursiva': # Garante que opções M/E fiquem nulas
+             nova_pergunta.opcao_a, nova_pergunta.opcao_b, nova_pergunta.opcao_c, nova_pergunta.opcao_d = None, None, None, None
+
+
     db.session.add(nova_pergunta)
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
-    if 'enviar_notificacao' in request.form:
-        disparar_notificacao_nova_pergunta(nova_pergunta)
+    
+    # A lógica de notificação foi desativada para a versão local
+    # if 'enviar_notificacao' in request.form:
+    #     disparar_notificacao_nova_pergunta(nova_pergunta)
+    
     return redirect(url_for('pagina_admin'))
 
-@app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET', 'POST'])
+@app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET'])
 def editar_pergunta(pergunta_id):
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     pergunta = Pergunta.query.get_or_404(pergunta_id)
-    if request.method == 'POST':
-        tipo = request.form['tipo']
-        pergunta.tipo = tipo
-        pergunta.texto = request.form['texto']
-        pergunta.data_liberacao = datetime.strptime(request.form['data_liberacao'], '%Y-%m-%d').date()
-        pergunta.resposta_correta = request.form['resposta_correta']
-        pergunta.tempo_limite = request.form['tempo_limite']
-        if tipo == 'multipla_escolha':
-            pergunta.opcao_a = request.form.get('opcao_a')
-            pergunta.opcao_b = request.form.get('opcao_b')
-            pergunta.opcao_c = request.form.get('opcao_c')
-            pergunta.opcao_d = request.form.get('opcao_d')
+    todos_departamentos = Departamento.query.order_by(Departamento.nome).all()
+    return render_template('edit_question.html', pergunta=pergunta, todos_departamentos=todos_departamentos)
+
+@app.route('/admin/edit_question/<int:pergunta_id>', methods=['POST'])
+def atualizar_pergunta(pergunta_id):
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+    
+    pergunta = Pergunta.query.get_or_404(pergunta_id)
+    
+    # Atualiza os campos básicos
+    pergunta.tipo = request.form.get('tipo')
+    pergunta.texto = request.form.get('texto')
+    pergunta.data_liberacao = datetime.strptime(request.form.get('data_liberacao'), '%Y-%m-%d').date()
+
+    # =========================================================
+    # LÓGICA CORRIGIDA PARA ATUALIZAR A IMAGEM USANDO CLOUDINARY
+    # =========================================================
+    if 'imagem_pergunta' in request.files:
+        file = request.files['imagem_pergunta']
+        if file and file.filename != '' and allowed_file(file.filename):
+            # (Opcional, mas boa prática: apaga a imagem antiga do Cloudinary)
+            if pergunta.imagem_pergunta:
+                # Extrai o 'public_id' da URL antiga para poder deletar
+                public_id = pergunta.imagem_pergunta.split('/')[-1].split('.')[0]
+                cloudinary.uploader.destroy(public_id)
+
+            # Envia a NOVA imagem para o Cloudinary
+            upload_result = cloudinary.uploader.upload(file, folder="perguntas_quiz")
+            # Pega a URL segura que o Cloudinary devolveu
+            imagem_url = upload_result.get('secure_url')
+            # Atualiza a URL da pergunta no banco de dados
+            pergunta.imagem_pergunta = imagem_url
+    # =========================================================
+
+    # Lógica para atualizar os setores (já estava correta)
+    pergunta.departamentos.clear()
+    if 'para_todos_setores' in request.form:
+        pergunta.para_todos_setores = True
+    else:
+        pergunta.para_todos_setores = False
+        departamento_ids = request.form.getlist('departamentos')
+        if departamento_ids:
+            departamentos_selecionados = Departamento.query.filter(Departamento.id.in_(departamento_ids)).all()
+            pergunta.departamentos = departamentos_selecionados
+
+    # Lógica para campos específicos do tipo (já estava correta)
+    if pergunta.tipo in ['multipla_escolha', 'verdadeiro_falso']:
+        pergunta.resposta_correta = request.form.get('resposta_correta')
+        pergunta.tempo_limite = request.form.get('tempo_limite')
+        if pergunta.tipo == 'multipla_escolha':
+            pergunta.opcao_a, pergunta.opcao_b, pergunta.opcao_c, pergunta.opcao_d = request.form.get('opcao_a'), request.form.get('opcao_b'), request.form.get('opcao_c'), request.form.get('opcao_d')
         else:
             pergunta.opcao_a, pergunta.opcao_b, pergunta.opcao_c, pergunta.opcao_d = None, None, None, None
-        db.session.commit()
-        flash('Pergunta atualizada com sucesso!', 'success')
-        return redirect(url_for('pagina_admin'))
-    return render_template('edit_question.html', pergunta=pergunta)
+    else: # Discursiva
+        pergunta.resposta_correta, pergunta.tempo_limite = None, None
+        pergunta.opcao_a, pergunta.opcao_b, pergunta.opcao_c, pergunta.opcao_d = None, None, None, None
+        
+    db.session.commit()
+    flash('Pergunta atualizada com sucesso!', 'success')
+    return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/delete_question/<int:pergunta_id>', methods=['POST'])
 def excluir_pergunta(pergunta_id):
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     pergunta = Pergunta.query.get_or_404(pergunta_id)
+    if pergunta.imagem_pergunta:
+        caminho_imagem = os.path.join(app.config['UPLOAD_FOLDER'], pergunta.imagem_pergunta)
+        if os.path.exists(caminho_imagem):
+            os.remove(caminho_imagem)
     Resposta.query.filter_by(pergunta_id=pergunta.id).delete()
     db.session.delete(pergunta)
     db.session.commit()
-    flash('Pergunta e respostas associadas foram excluídas.', 'success')
+    flash('Pergunta e todas as suas respostas foram excluídas.', 'success')
     return redirect(url_for('pagina_admin'))
+
+@app.route('/admin/correcoes')
+def pagina_correcoes():
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
+    usuario_selecionado_id = request.args.get('usuario_id', type=int)
+    status_selecionado = request.args.get('status', 'pendente')
+    query = Resposta.query.join(Pergunta).filter(Pergunta.tipo == 'discursiva')
+    if status_selecionado != 'todos':
+        query = query.filter(Resposta.status_correcao == status_selecionado)
+    if usuario_selecionado_id:
+        query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
+    respostas_filtradas = query.join(Usuario).order_by(Resposta.data_resposta.desc()).all()
+    return render_template('correcoes.html', 
+                           respostas=respostas_filtradas, 
+                           usuarios_disponiveis=usuarios_disponiveis, 
+                           usuario_selecionado_id=usuario_selecionado_id,
+                           status_selecionado=status_selecionado)
+
+# Em app.py
+
+@app.route('/admin/corrigir/<int:resposta_id>', methods=['POST'])
+def corrigir_resposta(resposta_id):
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('pagina_admin'))
+        
+    resposta = Resposta.query.get_or_404(resposta_id)
+    
+    novo_status = request.form.get('status')
+    feedback_texto = request.form.get('feedback', '')
+    
+    # MUDANÇA: Adicionada a nova opção 'parcialmente_correto'
+    if novo_status in ['correto', 'incorreto', 'parcialmente_correto']:
+        resposta.status_correcao = novo_status
+        resposta.feedback_admin = feedback_texto
+        
+        if novo_status == 'correto':
+            resposta.pontos = 100
+        elif novo_status == 'parcialmente_correto':
+            resposta.pontos = 50 # Pontuação intermediária
+        else: # Incorreto
+            resposta.pontos = 0
+            
+        db.session.commit()
+        flash('Resposta avaliada com sucesso!', 'success')
+    else:
+        flash('Ação de correção inválida.', 'danger')
+        
+    return redirect(url_for('pagina_correcoes'))
 
 @app.route('/admin/analytics')
 def pagina_analytics():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
+    usuario_selecionado_id = request.args.get('usuario_id', type=int)
+    base_query = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
+    if usuario_selecionado_id:
+        base_query = base_query.filter(Resposta.usuario_id == usuario_selecionado_id)
+    todas_as_respostas_objetivas = base_query.all()
     stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
-    todas_as_respostas = Resposta.query.all()
-    for resposta in todas_as_respostas:
+    for resposta in todas_as_respostas_objetivas:
         stats_perguntas_raw[resposta.pergunta_id]['total'] += 1
         if resposta.pontos == 0:
             stats_perguntas_raw[resposta.pergunta_id]['erros'] += 1
@@ -436,131 +787,70 @@ def pagina_analytics():
             percentual = (data['erros'] / data['total']) * 100 if data['total'] > 0 else 0
             stats_perguntas.append({'texto': pergunta.texto, 'total': data['total'], 'erros': data['erros'], 'percentual': percentual})
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
+    respostas_erradas_query = Resposta.query.join(Pergunta).filter(Resposta.pontos == 0, Pergunta.tipo != 'discursiva')
+    if usuario_selecionado_id:
+        respostas_erradas_query = respostas_erradas_query.filter(Resposta.usuario_id == usuario_selecionado_id)
+    respostas_erradas = respostas_erradas_query.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
     erros_por_setor = defaultdict(lambda: defaultdict(list))
-    respostas_erradas = Resposta.query.filter(Resposta.pontos == 0).join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
     for r in respostas_erradas:
-        setor_nome = r.usuario.departamento.nome
-        usuario_nome = r.usuario.nome
-        erros_por_setor[setor_nome][usuario_nome].append({'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'), 'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada), 'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)})
-    return render_template('analytics.html', stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor)
+        setor_nome, usuario_nome = r.usuario.departamento.nome, r.usuario.nome
+        erros_por_setor[setor_nome][usuario_nome].append({
+            'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'),
+            'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada),
+            'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
+        })
+    return render_template('analytics.html', 
+                           stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor,
+                           usuarios_disponiveis=usuarios_disponiveis, usuario_selecionado_id=usuario_selecionado_id)
 
-@app.route('/admin/upload_csv', methods=['POST'])
-def upload_csv():
-    if not session.get('admin_logged_in'): 
-        return redirect(url_for('pagina_admin'))
-
-    arquivo = request.files.get('arquivo_planilha') 
-
+@app.route('/admin/upload_planilha', methods=['POST'])
+def upload_planilha():
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    arquivo = request.files.get('arquivo_planilha')
     if not arquivo or not (arquivo.filename.lower().endswith('.xls') or arquivo.filename.lower().endswith('.xlsx')):
         flash('Arquivo inválido ou não selecionado. Envie uma planilha .xls ou .xlsx.', 'danger')
         return redirect(url_for('pagina_admin'))
-
     try:
         df = pd.read_excel(arquivo)
         df = df.fillna('')
-        
-        # --- AJUSTE DA DATA (INÍCIO) ---
-        # 1. Verifica se a coluna de data existe na planilha
         if 'data_liberacao' in df.columns:
-            # 2. Converte a coluna para o tipo datetime do pandas, tratando possíveis erros
-            df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce')
-            
-            # 3. Formata a data para o padrão brasileiro (DD/MM/AAAA)
-            #    Onde a data for inválida (NaT), deixará a célula vazia.
-            df['data_liberacao'] = df['data_liberacao'].dt.strftime('%d/%m/%Y').fillna('')
-
-        # --- AJUSTE DA DATA (FIM) ---
-
-        # Agora, convertemos o RESTO para string, como antes
+            df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
         for col in df.columns:
-            # Não precisamos converter a data novamente
             if col != 'data_liberacao':
-                df[col] = df[col].astype(str)
-                if df[col].str.contains(r'\.0$').any():
-                    df[col] = df[col].str.replace(r'\.0$', '', regex=True)
-
+                df[col] = df[col].astype(str).str.replace(r'\.0$', '', regex=True)
         headers = df.columns.tolist()
         dados_da_planilha = df.to_dict(orient='records')
-        
         session['csv_headers'] = headers
-        
         validated_data = []
         has_valid_rows = False
-        
         for row in dados_da_planilha:
-            is_valid, errors = validar_linha_csv(row)
+            is_valid, errors = validar_linha(row)
             if is_valid: has_valid_rows = True
             validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
-            
         session['csv_data'] = validated_data
         session['has_valid_rows'] = has_valid_rows
-        
         return redirect(url_for('preview_csv'))
-        
     except Exception as e:
         app.logger.error(f"Erro ao ler a planilha Excel: {e}")
         flash(f"Ocorreu um erro inesperado ao processar a planilha: {e}", "danger")
         return redirect(url_for('pagina_admin'))
 
-    
 @app.route('/admin/preview_csv')
 def preview_csv():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('pagina_admin'))
-
-    # MUDANÇA: Recupera a ordem dos cabeçalhos da sessão, além dos outros dados
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     validated_data = session.get('csv_data', [])
     has_valid_rows = session.get('has_valid_rows', False)
     headers = session.get('csv_headers', [])
-    
     return render_template('preview_csv.html', data=validated_data, has_valid_rows=has_valid_rows, headers=headers)
 
-@app.route('/admin/process_import', methods=['POST'])
-def processar_importacao():
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    validated_data = session.get('csv_data', [])
-    if not validated_data:
-        flash("Nenhum dado de importação encontrado na sessão.", "danger")
-        return redirect(url_for('pagina_admin'))
-    success_count = 0
-    perguntas_para_notificar = []
-    for row_data in validated_data:
-        if row_data['is_valid']:
-            row = row_data['data']
-            try:
-                data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
-                nova_pergunta = Pergunta(
-                    tipo=row['tipo'], texto=row['texto'],
-                    opcao_a=row['opcao_a'] or None, opcao_b=row['opcao_b'] or None,
-                    opcao_c=row['opcao_c'] or None, opcao_d=row['opcao_d'] or None,
-                    resposta_correta=row['resposta_correta'], data_liberacao=data_obj,
-                    tempo_limite=int(row['tempo_limite'])
-                )
-                db.session.add(nova_pergunta)
-                if row.get('enviar_notificacao', '').lower() == 'sim':
-                    perguntas_para_notificar.append(nova_pergunta)
-                success_count += 1
-            except Exception as e:
-                db.session.rollback()
-                app.logger.error(f"Erro ao salvar linha (previamente válida): {e} | Dados: {row}")
-    db.session.commit()
-    for pergunta in perguntas_para_notificar:
-        disparar_notificacao_nova_pergunta(pergunta)
-    session.pop('csv_data', None)
-    session.pop('has_valid_rows', None)
-    flash(f'{success_count} perguntas foram importadas com sucesso!', 'success')
-    return redirect(url_for('pagina_admin'))
+# Em app.py
 
 @app.route('/admin/processar_edicao_csv', methods=['POST'])
 def processar_edicao_csv():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    headers = session.get('csv_headers', [])
-    new_validated_data = []
-    
-    # 1. Agrupar os dados do formulário por linha (index)
-    # Ex: 'row-0-texto', 'row-0-tipo', 'row-1-texto', etc.
+    # 1. Reconstrói os dados da planilha a partir do formulário editado
     rows_data = defaultdict(dict)
     for key, value in request.form.items():
         if key.startswith('row-'):
@@ -570,118 +860,53 @@ def processar_edicao_csv():
             rows_data[row_index][col_name] = value
 
     success_count = 0
+    error_count = 0
     perguntas_para_notificar = []
-    has_unresolved_errors = False
     
-    # 2. Revalidar e Processar
+    # 2. Loop através das linhas corrigidas para salvar no banco
     for row_index in sorted(rows_data.keys()):
         row = rows_data[row_index]
-        is_valid, errors = validar_linha_csv(row)
+        is_valid, errors = validar_linha(row) # Revalida a linha
         
         if is_valid:
-            # Importa a linha (Lógica do processar_importacao)
             try:
                 data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
                 nova_pergunta = Pergunta(
-                    # Use .get() defensivamente aqui também!
                     tipo=row['tipo'], texto=row['texto'],
                     opcao_a=row.get('opcao_a') or None, opcao_b=row.get('opcao_b') or None,
                     opcao_c=row.get('opcao_c') or None, opcao_d=row.get('opcao_d') or None,
-                    resposta_correta=row['resposta_correta'], data_liberacao=data_obj,
-                    tempo_limite=int(row['tempo_limite'])
+                    resposta_correta=row.get('resposta_correta') or None, 
+                    data_liberacao=data_obj,
+                    tempo_limite=int(float(row['tempo_limite'])) if row.get('tempo_limite') else None
                 )
                 db.session.add(nova_pergunta)
-                if row.get('enviar_notificacao', '').lower() == 'sim':
-                    perguntas_para_notificar.append(nova_pergunta)
+                
+                # if row.get('enviar_notificacao', '').lower() == 'sim':
+                #     perguntas_para_notificar.append(nova_pergunta)
+                
                 success_count += 1
             except Exception as e:
                 db.session.rollback()
-                app.logger.error(f"Erro fatal ao salvar linha {row_index}: {e}")
-                # Se houver um erro de banco, precisamos parar ou reverter
-                flash("Ocorreu um erro interno durante a importação. Nenhuma pergunta salva.", 'danger')
-                return redirect(url_for('pagina_admin'))
+                error_count += 1
+                app.logger.error(f"Erro ao salvar linha {row_index} (após correção): {e} | Dados: {row}")
         else:
-            # 3. Se ainda houver erro, armazena para reexibir no preview
-            has_unresolved_errors = True
-            new_validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
+            error_count += 1
+            app.logger.error(f"Linha {row_index} ainda inválida após edição: {errors}")
 
     db.session.commit()
     
-    # Notifica os usuários em segundo plano
-    for pergunta in perguntas_para_notificar:
-        disparar_notificacao_nova_pergunta(pergunta)
+    # for pergunta in perguntas_para_notificar:
+    #     disparar_notificacao_nova_pergunta(pergunta)
         
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
-
-    if has_unresolved_errors:
-        # Se restaram erros, armazena os dados não importados e volta para o preview
-        session['csv_data'] = new_validated_data
-        session['has_valid_rows'] = (success_count > 0)
-        flash(f'Importação parcial concluída: {success_count} perguntas salvas. Corrija os erros restantes para importar o restante.', 'warning')
-        return redirect(url_for('preview_csv'))
+    session.pop('csv_headers', None)
+    
+    if error_count > 0:
+        flash(f'Importação parcial: {success_count} perguntas salvas. {error_count} linhas continham erros e foram ignoradas.', 'warning')
+    else:
+        flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
         
-    flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
     return redirect(url_for('pagina_admin'))
-
-# --- ROTAS DE SERVIÇO ---
-@app.route('/_init_db/<secret_key>')
-def init_db(secret_key):
-    expected_key = os.environ.get('INIT_DB_SECRET_KEY', 'sua-chave-secreta-dificil-de-adivinhar')
-    if secret_key != expected_key:
-        return "Chave secreta inválida.", 403
-    try:
-        app.logger.info("Iniciando a reinicialização do banco de dados...")
-        db.drop_all()
-        db.create_all()
-        app.logger.info("Tabelas criadas. Inserindo dados iniciais...")
-        dados_iniciais = {
-            "Suporte": [{'nome': 'Ana Oliveira', 'codigo_acesso': '1234', 'email': 'ana.oliveira@empresa.com'}, {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'}],
-            "Vendas": [{'nome': 'Carlos Dias', 'codigo_acesso': '9012', 'email': 'carlos.dias@empresa.com'}, {'nome': 'Daniela Lima', 'codigo_acesso': '3456', 'email': 'daniela.lima@empresa.com'}]
-        }
-        for nome_depto, lista_usuarios in dados_iniciais.items():
-            novo_depto = Departamento(nome=nome_depto)
-            db.session.add(novo_depto)
-            for user_data in lista_usuarios:
-                novo_usuario = Usuario(nome=user_data['nome'], codigo_acesso=user_data['codigo_acesso'], email=user_data['email'], departamento=novo_depto)
-                db.session.add(novo_usuario)
-        db.session.commit()
-        app.logger.info("Banco de dados inicializado com sucesso!")
-        return "<h1>Banco de dados inicializado com sucesso!</h1>"
-    except Exception as e:
-        app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
-        return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
-
-@app.route('/_send_notifications/<secret_key>')
-def trigger_email_notifications(secret_key):
-    expected_key = os.environ.get('NOTIFICATION_SECRET_KEY', 'sua-outra-chave-muito-secreta')
-    if secret_key != expected_key:
-        return "Chave secreta inválida.", 403
-    try:
-        app.logger.info("Gatilho de notificação recebido. Verificando novas perguntas...")
-        hoje = date.today()
-        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
-        if not perguntas_de_hoje:
-            app.logger.info("Nenhuma pergunta nova para hoje.")
-            return "Nenhuma pergunta nova para hoje.", 200
-        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
-        if not usuarios:
-            app.logger.info("Nenhum usuário com e-mail para notificar.")
-            return "Nenhum usuário com e-mail cadastrado.", 200
-        from_email = os.environ.get('SENDGRID_FROM_EMAIL')
-        if not from_email:
-            app.logger.error("A variável de ambiente SENDGRID_FROM_EMAIL não está configurada.")
-            return "Erro de configuração do servidor (remetente não definido).", 500
-        subject = "Novas perguntas disponíveis no Quiz Produtivo!"
-        link_do_quiz = "https://quiz-empresa.onrender.com/"
-        for usuario in usuarios:
-            body = (f"Olá, {usuario.nome}!\n\nTemos novas perguntas de conhecimento liberadas hoje para você responder.\n\nAcesse agora e teste seus conhecimentos:\n{link_do_quiz}\n\nAtenciosamente,\nEquipe Quiz Produtivo")
-            thread = Thread(target=send_email_async, args=[app.app_context(), from_email, usuario.email, subject, body])
-            thread.start()
-        return f"Processo de notificação iniciado para {len(usuarios)} usuários.", 200
-    except Exception as e:
-        app.logger.error(f"Ocorreu um erro ao executar o gatilho de notificações: {e}")
-        return f"Ocorreu um erro: {e}", 500
-
 if __name__ == '__main__':
     app.run(debug=True)

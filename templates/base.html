@@ -11,7 +11,7 @@
         /* --- Variáveis de Cor --- */
         :root {
             --cor-primaria: #0B3A2D;
-            --cor-acento: #00F5AB;
+            --cor-acento: #66df4e;
             --cor-acento-hover: #00D294;
             --cor-fundo: #f4f7fa;
             --cor-texto: #333333;
@@ -78,11 +78,11 @@
         
         .btn { display: inline-block; text-decoration: none; background-color: var(--cor-acento); color: var(--cor-primaria); font-weight: 800; padding: 15px 30px; margin: 10px; border-radius: 50px; font-size: 18px; transition: all 0.3s ease; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0, 245, 171, 0.2); }
         .btn:hover { background-color: var(--cor-acento-hover); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 245, 171, 0.3); }
-        .btn-secondary { background-color: #e9ecef; color: var(--cor-texto); box-shadow: none; }
+        .btn-secondary { background-color: #e97c60; color: var(--cor-texto); box-shadow: none; }
         .btn-secondary:hover { background-color: #d8dde2; box-shadow: none; }
         a { color: var(--cor-primaria); font-weight: 700; text-decoration: none; }
         a:hover { text-decoration: underline; }
-        .login-container, .dashboard-container, .ranking-container, .quiz-container { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); text-align: center; }
+        .login-container, .dashboard-container, .ranking-container, .quiz-container { background: rgb(191, 236, 201); padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); text-align: center; }
         
     /* --- Estilos de Formulários --- */
     input[type="password"], input[type="text"], input[type="number"], input[type="email"], textarea, select {
@@ -102,14 +102,42 @@
         .ranking-container th { background-color: var(--cor-primaria); color: var(--cor-texto-claro); font-size: 18px; }
         .timer { font-size: 48px; font-weight: 800; color: var(--cor-primaria); margin-bottom: 20px; }
         .question { font-size: 24px; margin-bottom: 30px; color: var(--cor-texto); font-weight: 700; }
-        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .option-btn { background-color: white; border: 2px solid var(--cor-borda); color: var(--cor-texto); padding: 20px; font-size: 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s; width: 100%; text-align: left; font-family: 'Nunito', sans-serif; }
-        .option-btn:hover { background-color: #f8f9fa; border-color: var(--cor-acento); color: var(--cor-primaria); }
+        .options { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    /* MUDANÇA: Adicionamos altura fixa para as linhas dos botões */
+    grid-template-rows: 80px 80px; 
+    gap: 15px; 
+}
+.option-btn { 
+    border: none;
+    color: white;
+    padding: 10px 20px; /* Ajustamos o padding para melhor centralização */
+    font-size: 18px; 
+    /* MUDANÇA: Bordas bem arredondadas */
+    border-radius: 50px; 
+    cursor: pointer; 
+    transition: all 0.2s ease; 
+    width: 100%; 
+    font-weight: 700;
+    /* MUDANÇA: Centraliza o texto verticalmente e horizontalmente */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center; /* Garante o alinhamento para o caso de quebra de linha */
+}
+}
+.option-btn:hover { 
+    /* O hover agora escurece levemente o botão e o levanta */
+    filter: brightness(90%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
         .option-btn:disabled { cursor: not-allowed; opacity: 0.6; }
 
         /* --- MUDANÇA: Estilos para o Acordeão (Barras Expansíveis) --- */
 .accordion-trigger {
-    background-color: #e9ecef;
+    background-color: #66df4e;
     color: var(--cor-texto);
     cursor: pointer;
     padding: 18px;
@@ -197,6 +225,20 @@
 .cell-error {
     border: 2px solid #dc3545 !important;
     background-color: #f5c6cb !important;
+}
+
+/* --- MUDANÇA: Cores para os botões do Quiz --- */
+.options .option-btn:nth-of-type(1) {
+    background-color: #e74c3c; /* Vermelho */
+}
+.options .option-btn:nth-of-type(2) {
+    background-color: #3498db; /* Azul */
+}
+.options .option-btn:nth-of-type(3) {
+    background-color: #f1c40f; /* Amarelo */
+}
+.options .option-btn:nth-of-type(4) {
+    background-color: #2ecc71; /* Verde (diferente do da marca) */
 }
     </style>
 </head>

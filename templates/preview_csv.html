@@ -4,11 +4,10 @@
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 95%;">
-    <h1>Pré-visualização e Correção da Planilha</h1>
-    <p>Corrija os campos marcados em vermelho. Apenas as linhas que estiverem válidas na submissão serão importadas.</p>
+    <h1>Pré-visualização e Validação da Planilha</h1>
+    <p>Corrija os erros diretamente na tabela. As linhas em verde estão prontas para importação. As linhas em vermelho precisam de correção.</p>
 
     <form action="{{ url_for('processar_edicao_csv') }}" method="post">
-        
         <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
             <table class="preview-table">
                 <thead>
@@ -20,47 +19,34 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in data %}
-                    {# --- CORREÇÃO 1: Armazenando o índice do loop externo em uma variável --- #}
-                    {% set row_index = loop.index0 %} 
-                    
-                    <tr class="{{ 'valid-row' if row.is_valid else 'invalid-row' }}">
-                        <td>
-                            {% if row.is_valid %}
-                                ✔️ Válido
-                            {% else %}
-                                ❌ Erro
-                            {% endif %}
-                        </td>
-                        
-                        {% for key in headers %}
-                        <td class="{{ 'cell-error' if key in row.errors else '' }}"> 
+                    {% for row_item in data %}
+                        {% set row_index = loop.index0 %}
+                        <tr class="{{ 'valid-row' if row_item.is_valid else 'invalid-row' }}">
+                            <td>
+                                {% if row_item.is_valid %} ✔️ Válido {% else %} ❌ Erro {% endif %}
+                            </td>
                             
-                            <input type="text" 
-                                   {# --- CORREÇÃO 2: Usando a variável que criamos --- #}
-                                   name="row-{{ row_index }}-{{ key }}"
-                                   value="{{ row.data.get(key, '') }}"
-                                   class="form-control"
-                                   style="width: 180px;">
-                            
-                            {% if key in row.errors %}
-                            <div style="color: darkred; font-size: 0.8em; margin-top: 5px;">
-                                ❌ Erro: {{ row.errors.get(key, '') }}
-                            </div>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
+                            {% for key in headers %}
+                                <td>
+                                    <input type="text" 
+                                           name="row-{{ row_index }}-{{ key }}" 
+                                           value="{{ row_item.data.get(key, '') }}"
+                                           class="{{ 'cell-error' if key in row_item.errors else '' }}"
+                                           title="{{ row_item.errors.get(key, '') }}"
+                                           style="width: 100%; min-width: 150px; box-sizing: border-box;">
+                                </td>
+                            {% endfor %}
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
         <div style="margin-top: 30px;">
-            <button type="submit" class="btn">Revalidar e Importar Linhas Válidas</button>
-            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar e Voltar</a>
+            <button type="submit" class="btn">Importar Perguntas Corrigidas</button>
+            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar</a>
         </div>
-
     </form>
+
 </div>
 {% endblock %}
