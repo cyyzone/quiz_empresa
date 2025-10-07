@@ -967,7 +967,7 @@ def corrigir_resposta(resposta_id):
         
     return redirect(url_for('pagina_correcoes'))
 
-@@app.route('/admin/analytics')
+@app.route('/admin/analytics')
 def pagina_analytics():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
