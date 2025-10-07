@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Relatórios de Erros{% endblock %}
+{% block title %}Relatórios e Análises{% endblock %}
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 900px;">
@@ -29,30 +29,16 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div style="flex: 1 1 150px;">
-                     <label style="font-weight: bold;">Mostrar:</label>
-                     <div style="padding-top: 10px;">
-                        <input type="radio" id="ver_erros" name="filtro_acertos" value="erros" {% if filtro_acertos == 'erros' or not filtro_acertos %}checked{% endif %}>
-                        <label for="ver_erros">Erros</label>
-                        <input type="radio" id="ver_acertos" name="filtro_acertos" value="acertos" {% if filtro_acertos == 'acertos' %}checked{% endif %} style="margin-left: 10px;">
-                        <label for="ver_acertos">Acertos</label>
-                     </div>
-                </div>
                 <div>
                     <button type="submit" formaction="{{ url_for('pagina_analytics') }}" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar Página</button>
                     <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
                 </div>
             </div>
-            
             <hr style="margin: 20px 0;">
-            
             <div style="display: flex; gap: 10px; align-items: center;">
-                <strong style="font-size: 14px;">Exportar Relatório Detalhado:</strong>
-                <button type="submit" formaction="{{ url_for('exportar_respostas_detalhado', tipo='quiz') }}" class="btn" style="background-color: #1a6a43; padding: 8px 12px; font-size: 14px;">
-                    Quiz Rápido
-                </button>
-                <button type="submit" formaction="{{ url_for('exportar_respostas_detalhado', tipo='discursivas') }}" class="btn" style="background-color: #1a6a43; padding: 8px 12px; font-size: 14px;">
-                    Discursivas
+                <strong style="font-size: 14px;">Exportar Relatório Completo (respeita os filtros acima):</strong>
+                <button type="submit" formaction="{{ url_for('exportar_respostas_detalhado') }}" class="btn" style="background-color: #1a6a43;">
+                    Exportar para Excel
                 </button>
             </div>
         </form>
@@ -90,7 +76,7 @@
 
     <hr style="margin: 40px 0;">
 
-    <h2>Análise de {{ 'Acertos' if filtro_acertos == 'acertos' else 'Erros' }} por Setor e Membro {% if usuario_selecionado_id or depto_selecionado_id %}<span style="font-size: 16px; color: #6c757d;">(Filtrado)</span>{% endif %}</h2>
+    <h2>Análise de Erros por Setor e Membro {% if usuario_selecionado_id or depto_selecionado_id %}<span style="font-size: 16px; color: #6c757d;">(Filtrado)</span>{% endif %}</h2>
     <div class="ranking-container" style="max-width: 900px; text-align: left;">
         {% for setor, usuarios in dados_agrupados.items() %}
             <h2 style="background-color: var(--cor-primaria); color: white; padding: 10px; border-radius: 8px;">Setor: {{ setor }}</h2>
@@ -108,7 +94,7 @@
                         {% for resposta in respostas %}
                         <tr>
                             <td style="white-space: normal;">{{ resposta.pergunta_texto }}</td>
-                            <td style="background-color: {{ '#d4edda' if filtro_acertos == 'acertos' else '#f8d7da' }};">
+                            <td style="background-color: #f8d7da;">
                                 <b>{{ resposta.resposta_dada.upper() if resposta.resposta_dada else '' }}</b>
                                 {% if resposta.resposta_dada %}) {{ resposta.texto_resposta_dada }}{% endif %}
                             </td>

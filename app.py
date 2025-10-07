@@ -147,7 +147,6 @@ def _gerar_dados_relatorio(departamento_id=None):
         func.sum(case((or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])), 1), else_=0)).label('respostas_corretas'),
         func.coalesce(func.sum(Resposta.pontos), 0).label('pontuacao_total')
     ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(
-        # MUDANÇA: Adicionamos Departamento.nome ao GROUP BY
         Usuario.id, Departamento.nome
     )
 
@@ -170,7 +169,8 @@ def _gerar_dados_relatorio(departamento_id=None):
     return relatorios_finais
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
-@app.route('/')
+# Nesta seção, eu defino as páginas principais que os colaboradores podem acessar, como a tela de login, o painel principal (dashboard) e a tela do quiz.
+@app.route('/') # Esta é a minha página inicial. Eu verifico se o usuário já está logado (olhando se o 'usuario_id' está na sessão). Se estiver, eu o redireciono para o dashboard. Se não, eu mostro a página de login.
 def pagina_login():
     if 'usuario_id' in session: return redirect(url_for('dashboard'))
     return render_template('login.html')
@@ -406,40 +406,17 @@ def exportar_respostas_detalhado():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    # Pega todos os filtros da URL
     depto_selecionado_id = request.args.get('departamento_id', type=int)
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
-    tipo_relatorio = request.args.get('tipo') # 'quiz' ou 'discursivas'
-    filtro_acertos = request.args.get('filtro_acertos', 'todos')
 
-    # Monta a busca base, já juntando as tabelas necessárias
+    # Busca base de TODAS as respostas, juntando as informações necessárias
     query = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
 
-    # Aplica filtros de setor e colaborador
+    # Aplica os filtros de setor e/ou colaborador, se foram selecionados
     if depto_selecionado_id:
         query = query.filter(Usuario.departamento_id == depto_selecionado_id)
     if usuario_selecionado_id:
         query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
-    
-    # --- LÓGICA DE FILTRO CORRIGIDA ---
-    # Aplica o filtro de TIPO de relatório
-    if tipo_relatorio == 'quiz':
-        query = query.filter(Pergunta.tipo != 'discursiva')
-        # Aplica filtro de acertos/erros para o quiz
-        if filtro_acertos == 'acertos':
-            query = query.filter(Resposta.pontos > 0)
-        elif filtro_acertos == 'erros':
-            query = query.filter(Resposta.pontos == 0)
-    
-    # O 'elif' agora está no nível correto, fora do primeiro 'if'
-    elif tipo_relatorio == 'discursivas':
-        query = query.filter(Pergunta.tipo == 'discursiva')
-        # Aplica filtro de acertos/erros para discursivas
-        if filtro_acertos == 'acertos':
-            query = query.filter(Resposta.status_correcao.in_(['correto', 'parcialmente_correto']))
-        elif filtro_acertos == 'erros':
-            query = query.filter(Resposta.status_correcao == 'incorreto')
-    # --- FIM DA CORREÇÃO ---
 
     todas_as_respostas = query.order_by(Departamento.nome, Usuario.nome, Resposta.data_resposta).all()
 
@@ -447,46 +424,50 @@ def exportar_respostas_detalhado():
         flash("Nenhuma resposta encontrada para exportar com os filtros selecionados.", "warning")
         return redirect(url_for('pagina_analytics'))
 
-    # Processa os dados e cria a planilha de acordo com o tipo
+    # Processa os dados para um formato unificado
     dados_para_planilha = []
-    colunas = []
-    
-    if tipo_relatorio == 'quiz':
-        colunas = ['Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Tipo', 'Resposta Dada', 'Resposta Correta', 'Pontos']
-        for r in todas_as_respostas:
-            dados_para_planilha.append({
-                'Colaborador': r.usuario.nome, 'Setor': r.usuario.departamento.nome,
-                'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
-                'Pergunta': r.pergunta.texto, 'Tipo': r.pergunta.tipo,
-                'Resposta Dada': get_texto_da_opcao(r.pergunta, r.resposta_dada),
-                'Resposta Correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta),
-                'Pontos': r.pontos or 0
-            })
-    else: # Discursivas
-        colunas = ['Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Resposta Discursiva', 'Status', 'Feedback', 'Pontos']
-        for r in todas_as_respostas:
-             dados_para_planilha.append({
-                'Colaborador': r.usuario.nome, 'Setor': r.usuario.departamento.nome,
-                'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
-                'Pergunta': r.pergunta.texto, 'Resposta Discursiva': r.texto_discursivo,
-                'Status': r.status_correcao, 'Feedback': r.feedback_admin or '',
-                'Pontos': r.pontos or 0
-            })
+    for r in todas_as_respostas:
+        # Lógica para unificar as colunas de resposta e status
+        if r.pergunta.tipo == 'discursiva':
+            resposta_dada = r.texto_discursivo
+            resposta_correta = '(Avaliação Manual)'
+            status = r.status_correcao
+        else:
+            resposta_dada = get_texto_da_opcao(r.pergunta, r.resposta_dada)
+            resposta_correta = get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
+            status = "Correto" if (r.pontos or 0) > 0 else "Incorreto"
 
-    # Cria o arquivo Excel em memória
+        dados_para_planilha.append({
+            'Colaborador': r.usuario.nome,
+            'Setor': r.usuario.departamento.nome,
+            'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
+            'Pergunta': r.pergunta.texto,
+            'Tipo de Pergunta': r.pergunta.tipo,
+            'Resposta Dada': resposta_dada,
+            'Resposta Correta': resposta_correta,
+            'Status/Resultado': status,
+            'Pontos': r.pontos or 0,
+            'Feedback do Admin': r.feedback_admin or ''
+        })
+        
+    # Define a ordem final das colunas
+    colunas = [
+        'Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Tipo de Pergunta', 
+        'Resposta Dada', 'Resposta Correta', 'Status/Resultado', 'Pontos', 'Feedback do Admin'
+    ]
+    
     df = pd.DataFrame(dados_para_planilha, columns=colunas)
     output = io.BytesIO()
-    nome_arquivo = f'relatorio_detalhado_{tipo_relatorio}.xlsx'
+    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Relatorio Detalhado')
+        df.to_excel(writer, index=False, sheet_name='Relatorio_Completo')
     output.seek(0)
 
-    # Envia o arquivo para download
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=nome_arquivo
+        download_name='relatorio_completo_respostas.xlsx'
     )
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
