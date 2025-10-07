@@ -86,11 +86,11 @@ class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pe
     feedback_visto = db.Column(db.Boolean, default=False, nullable=False) # Um campo booleano para marcar se o usuário já viu o feedback do admin. O padrão é False (não visto).
 
 # --- FUNÇÕES AUXILIARES ---
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+def allowed_file(filename): # Função para verificar se o arquivo enviado tem uma extensão permitida.
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS'] 
 
 
-@app.template_filter('datetime_local')
+@app.template_filter('datetime_local') 
 def format_datetime_local(valor_utc):
     """Filtro para converter uma data UTC para o fuso local (UTC-3) e formatá-la."""
     if not valor_utc:
@@ -991,19 +991,16 @@ def pagina_analytics():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
     
-    # Busca listas para popular os menus de filtro na tela
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
     departamentos = Departamento.query.order_by(Departamento.nome).all()
     
-    # Pega os valores dos filtros da URL
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
     depto_selecionado_id = request.args.get('departamento_id', type=int)
     filtro_acertos = request.args.get('filtro_acertos', 'erros')
     filtro_tipo = request.args.get('filtro_tipo')
 
     # --- Lógica para "Percentual de Erros por Pergunta" ---
-    # CORREÇÃO: Construção da query de forma mais limpa, juntando as tabelas no início
-    base_query_stats = Resposta.query.join(Usuario).join(Pergunta)
+    base_query_stats = Resposta.query.join(Pergunta)
     
     if filtro_tipo:
         base_query_stats = base_query_stats.filter(Pergunta.tipo == filtro_tipo)
@@ -1011,7 +1008,7 @@ def pagina_analytics():
         base_query_stats = base_query_stats.filter(Pergunta.tipo != 'discursiva')
         
     if depto_selecionado_id:
-        base_query_stats = base_query_stats.filter(Usuario.departamento_id == depto_selecionado_id)
+        base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
     if usuario_selecionado_id:
         base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
     
@@ -1031,8 +1028,7 @@ def pagina_analytics():
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
 
     # --- Lógica para "Análise Detalhada" (Acertos ou Erros) ---
-    # CORREÇÃO: Construção da query de forma mais limpa, juntando tabelas no início
-    query_detalhada = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
+    query_detalhada = Resposta.query.join(Pergunta).join(Usuario).join(Departamento)
 
     if filtro_tipo:
         query_detalhada = query_detalhada.filter(Pergunta.tipo == filtro_tipo)
