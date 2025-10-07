@@ -1063,7 +1063,6 @@ def pagina_analytics():
             'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
         })
 
-
     return render_template('analytics.html', 
                            stats_perguntas=stats_perguntas, 
                            dados_agrupados=dados_agrupados,
