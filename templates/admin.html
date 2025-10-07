@@ -4,7 +4,16 @@
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 1100px;">
-    <h1>Área do Administrador</h1>
+    <h1>Área do Administrador 
+        <button class="open-help-modal help-button" 
+            data-help-text="Esta é a área de gerenciamento. Use as seções abaixo para:
+            
+            • Gerenciar Setores: Crie ou exclua os setores da empresa. Lembre-se que um setor só pode ser excluído se não tiver usuários.
+            
+            • Gerenciar Usuários: Adicione novos colaboradores, edite suas informações (incluindo movê-los de setor) ou exclua-os.
+            
+            • Gerenciar Perguntas: Crie perguntas individualmente, importe em massa via planilha Excel ou filtre a lista de perguntas existentes para editar ou excluir.">?</button>
+    </h1>
 
     {% if contagem_pendentes > 0 %}
     <a href="{{ url_for('pagina_correcoes') }}" style="text-decoration: none;">
