@@ -17,18 +17,17 @@ app = Flask(__name__) # Crio a instância principal da minha aplicação Flask. 
 
 
 # --- CONFIGURAÇÕES GERAIS ---
-# Para o Render, estas chaves virão das Variáveis de Ambiente
-# Para o modo local, o app.config abaixo funcionará
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'uma-chave-secreta-local-muito-dificil')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'}
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'uma-chave-secreta-local-muito-dificil') # Configuro uma chave secreta para a minha aplicação. Ela é usada pelo Flask para proteger os dados da sessão do usuário (como o login) contra manipulação. O código primeiro tenta pegar uma chave segura do ambiente do servidor (no Render).Se não encontrar, ele usa uma chave padrão para o meu ambiente local.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz.db') # Defino onde meu banco de dados está. Da mesma forma, ele primeiro procura uma URL de banco de dados no ambiente do servidor (o PostgreSQL do Render).Se não encontrar, ele usa o arquivo 'quiz.db' local (SQLite) como padrão.Isso faz com que o mesmo código funcione tanto na nuvem quanto no meu computador.
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False #Desativo uma funcionalidade do SQLAlchemy que rastreia modificações e emite sinais. Fazer isso economiza recursos e é a configuração recomendada.
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'} # Crio uma "lista branca" de extensões de arquivo que eu permito que sejam enviadas para a minha aplicação. Isso aumenta a segurança, impedindo o upload de arquivos perigosos.
 
 # --- CONFIGURAÇÃO DO CLOUDINARY (Lê das Variáveis de Ambiente) ---
+# Aqui, eu preparo a conexão da minha aplicação com o serviço do Cloudinary,que é o "HD externo na nuvem" onde eu guardo minhas imagens e anexos.
 cloudinary.config(
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    api_key = os.environ.get('CLOUDINARY_API_KEY'),
-    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME'), # Eu digo ao Cloudinary qual é o "nome da minha nuvem", ou seja, minha conta. A instrução 'os.environ.get(...)' busca essa informação de forma segura das Variáveis de Ambiente do meu servidor (como o Render).
+    api_key = os.environ.get('CLOUDINARY_API_KEY'), # Esta é a minha "chave de acesso pública". É como se fosse o meu nome de usuário para a API do Cloudinary. Também a busco de forma segura do ambiente.
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET') # Esta é a minha "chave secreta". É a senha que prova para o Cloudinary que sou eu mesmo, autorizando minha aplicação a enviar e apagar arquivos. É a informação mais sensível, e por isso é essencial que ela venha do ambiente.
 )
 
 # --- INICIALIZAÇÕES ---
@@ -400,7 +399,7 @@ def minhas_respostas():
                            filtro_resultado=filtro_resultado)
 
 
-@app.route('/admin/relatorios/exportar_detalhado')
+@@app.route('/admin/relatorios/exportar_detalhado')
 def exportar_respostas_detalhado():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
@@ -420,6 +419,7 @@ def exportar_respostas_detalhado():
     if usuario_selecionado_id:
         query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
     
+    # --- INÍCIO DA CORREÇÃO ---
     # Aplica o filtro de TIPO de relatório
     if tipo_relatorio == 'quiz':
         query = query.filter(Pergunta.tipo != 'discursiva')
@@ -428,6 +428,8 @@ def exportar_respostas_detalhado():
             query = query.filter(Resposta.pontos > 0)
         elif filtro_acertos == 'erros':
             query = query.filter(Resposta.pontos == 0)
+
+    # O 'elif' agora está no nível correto
     elif tipo_relatorio == 'discursivas':
         query = query.filter(Pergunta.tipo == 'discursiva')
         # Aplica filtro de acertos/erros para discursivas
@@ -435,6 +437,7 @@ def exportar_respostas_detalhado():
             query = query.filter(Resposta.status_correcao.in_(['correto', 'parcialmente_correto']))
         elif filtro_acertos == 'erros':
             query = query.filter(Resposta.status_correcao == 'incorreto')
+    # --- FIM DA CORREÇÃO ---
 
     todas_as_respostas = query.order_by(Departamento.nome, Usuario.nome, Resposta.data_resposta).all()
 
@@ -485,7 +488,6 @@ def exportar_respostas_detalhado():
         as_attachment=True,
         download_name=nome_arquivo
     )
-
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
 def pagina_ranking():
@@ -1002,15 +1004,16 @@ def pagina_analytics():
     base_query_stats = Resposta.query.join(Pergunta)
     
     # O padrão da estatística de erros é sempre para perguntas objetivas
-    if not filtro_tipo:
-        base_query_stats = base_query_stats.filter(Pergunta.tipo != 'discursiva')
-    elif filtro_tipo:
+    base_query_stats = Resposta.query.join(Pergunta)
+    if filtro_tipo:
         base_query_stats = base_query_stats.filter(Pergunta.tipo == filtro_tipo)
-
-    if usuario_selecionado_id:
-        base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
+    else:
+        base_query_stats = base_query_stats.filter(Pergunta.tipo != 'discursiva')
+        
     if depto_selecionado_id:
         base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+    if usuario_selecionado_id:
+        base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
     
     todas_as_respostas = base_query_stats.all()
     stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
@@ -1039,12 +1042,12 @@ def pagina_analytics():
         query_detalhada = query_detalhada.filter(or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])))
     else: # 'erros'
         query_detalhada = query_detalhada.filter(or_(Resposta.pontos == 0, Resposta.status_correcao == 'incorreto'))
-        
-    if usuario_selecionado_id:
-        query_detalhada = query_detalhada.filter(Resposta.usuario_id == usuario_selecionado_id)
+    
     if depto_selecionado_id:
         query_detalhada = query_detalhada.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
-    
+    if usuario_selecionado_id:
+        query_detalhada = query_detalhada.filter(Resposta.usuario_id == usuario_selecionado_id)
+
     respostas_detalhadas = query_detalhada.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
     
     dados_agrupados = defaultdict(lambda: defaultdict(list))
@@ -1059,6 +1062,7 @@ def pagina_analytics():
             'resposta_correta': r.pergunta.resposta_correta,
             'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
         })
+
 
     return render_template('analytics.html', 
                            stats_perguntas=stats_perguntas, 
