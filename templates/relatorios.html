@@ -8,19 +8,29 @@
     <p style="text-align: center;">Acompanhe o desempenho geral e a participação de cada colaborador.</p>
 
     <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6;">
-        <form method="get" action="{{ url_for('pagina_relatorios') }}" style="display: flex; align-items: center; gap: 15px;">
-            <label for="filtro_setor" style="font-weight: bold;">Filtrar por Setor:</label>
-            <select name="departamento_id" onchange="this.form.submit()" style="flex-grow: 1;">
-                <option value="">-- Todos os Setores --</option>
-                {% for depto in departamentos %}
-                    <option value="{{ depto.id }}" {% if depto.id == depto_selecionado_id %}selected{% endif %}>
-                        {{ depto.nome }}
-                    </option>
-                {% endfor %}
-            </select>
-            <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
+    <div style="display: flex; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
+        <form method="get" action="{{ url_for('pagina_relatorios') }}" style="display: flex; align-items: center; gap: 15px; flex-grow: 1;">
+            <div style="flex: 1 1 300px;">
+                <label for="filtro_setor" style="font-weight: bold;">Filtrar por Setor:</label>
+                <select name="departamento_id" onchange="this.form.submit()" style="width: 100%;">
+                    <option value="">-- Todos os Setores --</option>
+                    {% for depto in departamentos %}
+                        <option value="{{ depto.id }}" {% if depto.id == depto_selecionado_id %}selected{% endif %}>
+                            {{ depto.nome }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="align-self: flex-end;">
+                <button type="submit" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar</button>
+            </div>
         </form>
+        <div style="align-self: flex-end; display: flex; gap: 10px;">
+            <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
+            <a href="{{ url_for('exportar_relatorios', departamento_id=depto_selecionado_id) }}" class="btn" style="background-color: #1a6a43; padding: 10px 15px; margin: 0;">Exportar para Excel</a>
+        </div>
     </div>
+</div>
 
     <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
         <table class="preview-table">

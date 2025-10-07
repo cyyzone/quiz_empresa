@@ -10,7 +10,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 import cloudinary
 import cloudinary.uploader
-
+from flask import send_file
 app = Flask(__name__)
 
 # --- CONFIGURAÇÕES GERAIS ---
@@ -123,6 +123,36 @@ def validar_linha(row):
             errors['tempo_limite'] = "Deve ser um número."
     is_valid = not errors
     return is_valid, errors
+
+# Em app.py
+
+def _gerar_dados_relatorio(departamento_id=None):
+    """Função auxiliar que busca e processa os dados para o relatório."""
+    query = db.session.query(
+        Usuario.nome,
+        Departamento.nome.label('setor_nome'),
+        func.count(Resposta.id).label('total_respostas'),
+        func.sum(case((or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])), 1), else_=0)).label('respostas_corretas'),
+        func.coalesce(func.sum(Resposta.pontos), 0).label('pontuacao_total')
+    ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(Usuario.id)
+
+    if departamento_id:
+        query = query.filter(Usuario.departamento_id == departamento_id)
+
+    resultados = query.order_by(Usuario.nome).all()
+
+    relatorios_finais = []
+    for resultado in resultados:
+        aproveitamento = (resultado.respostas_corretas / resultado.total_respostas) * 100 if resultado.total_respostas > 0 else 0
+        relatorios_finais.append({
+            'nome': resultado.nome,
+            'setor': resultado.setor_nome,
+            'total_respostas': resultado.total_respostas,
+            'respostas_corretas': resultado.respostas_corretas,
+            'aproveitamento': aproveitamento,
+            'pontuacao_total': resultado.pontuacao_total
+        })
+    return relatorios_finais
 
 # --- ROTAS PRINCIPAIS DO USUÁRIO ---
 @app.route('/')
@@ -761,50 +791,65 @@ def pagina_correcoes():
                            usuario_selecionado_id=usuario_selecionado_id,
                            status_selecionado=status_selecionado)
 
-# Em app.py
 
 @app.route('/admin/relatorios')
 def pagina_relatorios():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    # Busca departamentos para popular o filtro
-    departamentos = Departamento.query.order_by(Departamento.nome).all()
     depto_selecionado_id = request.args.get('departamento_id', type=int)
+    departamentos = Departamento.query.order_by(Departamento.nome).all()
 
-    # A busca principal parte dos Usuários para incluir todos, mesmo os que não responderam
-    query = db.session.query(
-        Usuario.nome,
-        Departamento.nome.label('setor_nome'),
-        func.count(Resposta.id).label('total_respostas'),
-        # Conta como "correta" se os pontos forem > 0 OU o status for 'correto' ou 'parcialmente_correto'
-        func.sum(case((or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])), 1), else_=0)).label('respostas_corretas'),
-        func.coalesce(func.sum(Resposta.pontos), 0).label('pontuacao_total')
-    ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(Usuario.id)
-
-    # Aplica o filtro de departamento, se selecionado
-    if depto_selecionado_id:
-        query = query.filter(Usuario.departamento_id == depto_selecionado_id)
-
-    resultados = query.order_by(Usuario.nome).all()
-
-    # Processa os dados para calcular o aproveitamento
-    relatorios_finais = []
-    for resultado in resultados:
-        aproveitamento = (resultado.respostas_corretas / resultado.total_respostas) * 100 if resultado.total_respostas > 0 else 0
-        relatorios_finais.append({
-            'nome': resultado.nome,
-            'setor': resultado.setor_nome,
-            'total_respostas': resultado.total_respostas,
-            'respostas_corretas': resultado.respostas_corretas,
-            'aproveitamento': aproveitamento,
-            'pontuacao_total': resultado.pontuacao_total
-        })
+    # Agora apenas chama a função auxiliar para obter os dados
+    dados_relatorio = _gerar_dados_relatorio(depto_selecionado_id)
 
     return render_template('relatorios.html', 
-                           relatorios=relatorios_finais, 
+                           relatorios=dados_relatorio, 
                            departamentos=departamentos, 
                            depto_selecionado_id=depto_selecionado_id)
+
+
+@app.route('/admin/relatorios/exportar')
+def exportar_relatorios():
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+
+    depto_selecionado_id = request.args.get('departamento_id', type=int)
+
+    # 1. Reutiliza a mesma lógica de busca de dados
+    dados_relatorio = _gerar_dados_relatorio(depto_selecionado_id)
+
+    if not dados_relatorio:
+        flash("Nenhum dado para exportar com os filtros selecionados.", "warning")
+        return redirect(url_for('pagina_relatorios'))
+
+    # 2. Converte os dados para um formato que o pandas entende
+    df = pd.DataFrame(dados_relatorio)
+
+    # 3. Renomeia e reordena as colunas para a planilha
+    df = df.rename(columns={
+        'nome': 'Colaborador',
+        'setor': 'Setor',
+        'total_respostas': 'Respostas Totais',
+        'respostas_corretas': 'Respostas Corretas',
+        'aproveitamento': 'Aproveitamento (%)',
+        'pontuacao_total': 'Pontuação Total'
+    })
+    df['Aproveitamento (%)'] = df['Aproveitamento (%)'].map('{:.1f}%'.format)
+
+    # 4. Cria o arquivo Excel em memória
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Relatorio de Desempenho')
+    output.seek(0)
+
+    # 5. Envia o arquivo para download
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='relatorio_desempenho_quiz.xlsx'
+    )
 
 @app.route('/admin/corrigir/<int:resposta_id>', methods=['POST'])
 def corrigir_resposta(resposta_id):
