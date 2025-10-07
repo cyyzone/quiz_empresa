@@ -35,54 +35,55 @@ db = SQLAlchemy(app) # Crio a instância principal do SQLAlchemy e a conecto com
 SENHA_ADMIN = "admin123"
 
 # --- TABELA DE LIGAÇÃO (MUITOS-PARA-MUITOS) ---
-pergunta_departamento_association = db.Table('pergunta_departamento',
-    db.Column('pergunta_id', db.Integer, db.ForeignKey('pergunta.id'), primary_key=True),
-    db.Column('departamento_id', db.Integer, db.ForeignKey('departamento.id'), primary_key=True)
+pergunta_departamento_association = db.Table('pergunta_departamento', # Aqui eu crio uma "tabela de ligação" especial, que não tem uma classe de modelo própria.A função dela é servir como uma ponte entre as minhas perguntas e os meus departamentos,permitindo que uma única pergunta possa ser associada a vários departamentos, e que um departamento possa ter várias perguntas (uma relação "muitos-para-muitos").
+    db.Column('pergunta_id', db.Integer, db.ForeignKey('pergunta.id'), primary_key=True),  # A primeira coluna guarda o ID da pergunta. É uma "chave estrangeira" que aponta para a tabela 'pergunta'.
+    db.Column('departamento_id', db.Integer, db.ForeignKey('departamento.id'), primary_key=True)  # A segunda coluna guarda o ID do departamento. É uma "chave estrangeira" que aponta para a tabela 'departamento'.
 )
 
 # --- MODELOS DO BANCO DE DADOS ---
-class Departamento(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), unique=True, nullable=False)
-    usuarios = db.relationship('Usuario', backref='departamento', lazy=True)
+# Nesta seção, eu defino a "planta" de cada tabela do meu banco de dados. Cada classe representa uma tabela e cada atributo dentro dela representa uma coluna.
+class Departamento(db.Model): # Crio a tabela para guardar os setores da empresa.
+    id = db.Column(db.Integer, primary_key=True) # A chave primária, um número único para cada setor.
+    nome = db.Column(db.String(100), unique=True, nullable=False) # O nome do setor (ex: "Suporte"), não pode repetir nem ser vazio.
+    usuarios = db.relationship('Usuario', backref='departamento', lazy=True) # Crio a relação com a tabela de usuários. Isso me permite acessar `departamento.usuarios` para ver uma lista de todos os usuários neste setor.
 
-class Usuario(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True)
-    codigo_acesso = db.Column(db.String(4), unique=True, nullable=False)
-    departamento_id = db.Column(db.Integer, db.ForeignKey('departamento.id'), nullable=False)
-    respostas = db.relationship('Resposta', backref='usuario', lazy=True)
+class Usuario(db.Model): # Crio a tabela para guardar as informações dos colaboradores.
+    id = db.Column(db.Integer, primary_key=True) # A chave primária para cada usuário.
+    nome = db.Column(db.String(100), nullable=False) # O nome do usuário, campo obrigatório.
+    email = db.Column(db.String(120), unique=True, nullable=True) # O e-mail, que não pode se repetir, mas pode ser deixado em branco.
+    codigo_acesso = db.Column(db.String(4), unique=True, nullable=False) # O código de 4 dígitos para login, não pode repetir.
+    departamento_id = db.Column(db.Integer, db.ForeignKey('departamento.id'), nullable=False) # Crio a "chave estrangeira" que conecta cada usuário a um departamento. Isso garante que todo usuário pertença a um setor.
+    respostas = db.relationship('Resposta', backref='usuario', lazy=True) # Crio a relação com a tabela de respostas. Isso me permite acessar `usuario.respostas` para ver todas as respostas que este usuário já deu. O `backref='usuario'` cria o atalho `resposta.usuario` para acessar o usuário a partir de uma resposta.
 
-class Pergunta(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    tipo = db.Column(db.String(20), nullable=False, default='multipla_escolha')
-    texto = db.Column(db.String(500), nullable=False)
-    opcao_a = db.Column(db.String(500), nullable=True)
-    opcao_b = db.Column(db.String(500), nullable=True)
+class Pergunta(db.Model):  # Crio a tabela principal, que armazena todas as perguntas do quiz.
+    id = db.Column(db.Integer, primary_key=True) # A chave primária para cada pergunta.
+    tipo = db.Column(db.String(20), nullable=False, default='multipla_escolha') # O tipo da pergunta (ex: 'discursiva'), o padrão é múltipla escolha.
+    texto = db.Column(db.String(500), nullable=False) # O enunciado da pergunta.
+    opcao_a = db.Column(db.String(500), nullable=True) # As colunas para as opções de múltipla escolha. Podem ser nulas para outros tipos de pergunta.
+    opcao_b = db.Column(db.String(500), nullable=True) 
     opcao_c = db.Column(db.String(500), nullable=True)
     opcao_d = db.Column(db.String(500), nullable=True)
-    resposta_correta = db.Column(db.String(1), nullable=True)
-    data_liberacao = db.Column(db.Date, nullable=False)
-    tempo_limite = db.Column(db.Integer, nullable=True)
-    imagem_pergunta = db.Column(db.String(300), nullable=True)
-    para_todos_setores = db.Column(db.Boolean, default=False, nullable=False)
-    departamentos = db.relationship('Departamento', secondary=pergunta_departamento_association, lazy='subquery',
+    resposta_correta = db.Column(db.String(1), nullable=True) # A resposta correta ('a', 'b', 'v', etc.). Pode ser nula para perguntas discursivas.
+    data_liberacao = db.Column(db.Date, nullable=False) # A data a partir da qual a pergunta fica disponível.
+    tempo_limite = db.Column(db.Integer, nullable=True) # O tempo limite para responder (em segundos). Pode ser nulo para perguntas discursivas.
+    imagem_pergunta = db.Column(db.String(300), nullable=True) # O link da imagem da pergunta (do Cloudinary).
+    para_todos_setores = db.Column(db.Boolean, default=False, nullable=False)     # Um campo booleano para marcar se a pergunta é para todos ou para setores específicos.
+    departamentos = db.relationship('Departamento', secondary=pergunta_departamento_association, lazy='subquery', # Crio a relação "muitos-para-muitos" com a tabela de Departamentos, usando a 'tabela de ligação' que defini antes. Isso me permite acessar `pergunta.departamentos` para ver a lista de setores aos quais esta pergunta foi designada.
         backref=db.backref('perguntas', lazy=True))
 
-class Resposta(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    pontos = db.Column(db.Integer, nullable=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-    pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False)
-    resposta_dada = db.Column(db.String(1), nullable=True)
-    data_resposta = db.Column(db.DateTime, default=datetime.utcnow)
-    pergunta = db.relationship('Pergunta')
-    texto_discursivo = db.Column(db.Text, nullable=True)
-    anexo_resposta = db.Column(db.String(300), nullable=True)
-    status_correcao = db.Column(db.String(20), nullable=False, default='nao_respondido')
-    feedback_admin = db.Column(db.Text, nullable=True)
-    feedback_visto = db.Column(db.Boolean, default=False, nullable=False)
+class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pelos usuários.
+    id = db.Column(db.Integer, primary_key=True) # A chave primária para cada resposta.
+    pontos = db.Column(db.Integer, nullable=True) # A pontuação obtida na resposta. Pode ser nula para perguntas discursivas que ainda não foram corrigidas.
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False) # A "chave estrangeira" que conecta a resposta ao usuário que a deu.
+    pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False) # A "chave estrangeira" que conecta a resposta à pergunta correspondente.
+    resposta_dada = db.Column(db.String(1), nullable=True)  # A resposta dada pelo usuário ('a', 'b', 'v', etc.). Pode ser nula para perguntas discursivas.
+    data_resposta = db.Column(db.DateTime, default=datetime.utcnow) # A data e hora em que a resposta foi dada. O padrão é o momento atual (UTC).
+    pergunta = db.relationship('Pergunta') # Crio a relação com a tabela de perguntas. Isso me permite acessar `resposta.pergunta` para ver os detalhes da pergunta associada a esta resposta.
+    texto_discursivo = db.Column(db.Text, nullable=True)    # O texto da resposta para perguntas discursivas. Pode ser nulo para perguntas objetivas.
+    anexo_resposta = db.Column(db.String(300), nullable=True) # O link do anexo da resposta (do Cloudinary). Pode ser nulo se não houver anexo.
+    status_correcao = db.Column(db.String(20), nullable=False, default='nao_respondido') # O status da correção para perguntas discursivas. Pode ser 'pendente', 'correto', 'incorreto', etc.
+    feedback_admin = db.Column(db.Text, nullable=True) # O feedback escrito pelo admin após corrigir uma pergunta discursiva. Pode ser nulo se ainda não foi corrigido.
+    feedback_visto = db.Column(db.Boolean, default=False, nullable=False) # Um campo booleano para marcar se o usuário já viu o feedback do admin. O padrão é False (não visto).
 
 # --- FUNÇÕES AUXILIARES ---
 def allowed_file(filename):
@@ -1001,17 +1002,16 @@ def pagina_analytics():
     filtro_tipo = request.args.get('filtro_tipo')
 
     # --- Lógica para "Percentual de Erros por Pergunta" ---
-    base_query_stats = Resposta.query.join(Pergunta)
+    # CORREÇÃO: Construção da query de forma mais limpa, juntando as tabelas no início
+    base_query_stats = Resposta.query.join(Usuario).join(Pergunta)
     
-    # O padrão da estatística de erros é sempre para perguntas objetivas
-    base_query_stats = Resposta.query.join(Pergunta)
     if filtro_tipo:
         base_query_stats = base_query_stats.filter(Pergunta.tipo == filtro_tipo)
     else:
         base_query_stats = base_query_stats.filter(Pergunta.tipo != 'discursiva')
         
     if depto_selecionado_id:
-        base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+        base_query_stats = base_query_stats.filter(Usuario.departamento_id == depto_selecionado_id)
     if usuario_selecionado_id:
         base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
     
@@ -1031,7 +1031,8 @@ def pagina_analytics():
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
 
     # --- Lógica para "Análise Detalhada" (Acertos ou Erros) ---
-    query_detalhada = Resposta.query.join(Pergunta)
+    # CORREÇÃO: Construção da query de forma mais limpa, juntando tabelas no início
+    query_detalhada = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
 
     if filtro_tipo:
         query_detalhada = query_detalhada.filter(Pergunta.tipo == filtro_tipo)
@@ -1042,13 +1043,13 @@ def pagina_analytics():
         query_detalhada = query_detalhada.filter(or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])))
     else: # 'erros'
         query_detalhada = query_detalhada.filter(or_(Resposta.pontos == 0, Resposta.status_correcao == 'incorreto'))
-    
-    if depto_selecionado_id:
-        query_detalhada = query_detalhada.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+        
     if usuario_selecionado_id:
         query_detalhada = query_detalhada.filter(Resposta.usuario_id == usuario_selecionado_id)
-
-    respostas_detalhadas = query_detalhada.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
+    if depto_selecionado_id:
+        query_detalhada = query_detalhada.filter(Usuario.departamento_id == depto_selecionado_id)
+    
+    respostas_detalhadas = query_detalhada.order_by(Departamento.nome, Usuario.nome).all()
     
     dados_agrupados = defaultdict(lambda: defaultdict(list))
     for r in respostas_detalhadas:
