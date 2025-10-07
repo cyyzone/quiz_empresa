@@ -86,6 +86,16 @@ class Resposta(db.Model):
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+
+@app.template_filter('datetime_local')
+def format_datetime_local(valor_utc):
+    """Filtro para converter uma data UTC para o fuso local (UTC-3) e formatá-la."""
+    if not valor_utc:
+        return ""
+    # Subtrai 3 horas do tempo UTC
+    fuso_local = valor_utc - timedelta(hours=3)
+    return fuso_local.strftime('%d/%m/%Y às %H:%M')
+
 def get_texto_da_opcao(pergunta, opcao):
     if opcao == 'a': return pergunta.opcao_a
     if opcao == 'b': return pergunta.opcao_b

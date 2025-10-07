@@ -46,7 +46,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
                 <div>
                     <strong>Usuário:</strong> {{ resposta.usuario.nome }} ({{ resposta.usuario.departamento.nome }})<br>
-                    <strong>Enviado em:</strong> {{ resposta.data_resposta.strftime('%d/%m/%Y às %H:%M') }}
+                    <strong>Enviado em:</strong> {{ resposta.data_resposta | datetime_local }}
                 </div>
                 <div>
                     {% if resposta.status_correcao == 'correto' %}
