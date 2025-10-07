@@ -86,11 +86,12 @@ class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pe
     feedback_visto = db.Column(db.Boolean, default=False, nullable=False) # Um campo booleano para marcar se o usuário já viu o feedback do admin. O padrão é False (não visto).
 
 # --- FUNÇÕES AUXILIARES ---
-def allowed_file(filename): # Função para verificar se o arquivo enviado tem uma extensão permitida.
+# Criei esta seção para agrupar pequenas funções que são reutilizadas em várias partes do meu projeto.
+
+def allowed_file(filename):# Criei esta função para verificar se um arquivo que o usuário enviou tem uma extensão permitida.Ela checa se o nome do arquivo contém um '.' e se a extensão (a parte depois do último '.')está na minha lista 'ALLOWED_EXTENSIONS' que defini nas configurações. Isso é uma medida de segurança.
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS'] 
 
-
-@app.template_filter('datetime_local') 
+@app.template_filter('datetime_local')  #Criei este filtro personalizado para os meus templates HTML. A função dele é receber uma data que está no horário universal (UTC), subtrair 3 horas para ajustar para o meu fuso horário local (de Curitiba),e formatá-la de um jeito amigável (ex: '07/10/2025 às 19:50').O '@app.template_filter' me permite usar isso no HTML com a sintaxe 'minha_data | datetime_local'.
 def format_datetime_local(valor_utc):
     """Filtro para converter uma data UTC para o fuso local (UTC-3) e formatá-la."""
     if not valor_utc:
@@ -99,7 +100,7 @@ def format_datetime_local(valor_utc):
     fuso_local = valor_utc - timedelta(hours=3)
     return fuso_local.strftime('%d/%m/%Y às %H:%M')
 
-def get_texto_da_opcao(pergunta, opcao):
+def get_texto_da_opcao(pergunta, opcao): # Esta função recebe uma pergunta e uma letra de opção ('a', 'b', 'v', etc.) e retorna o texto completo daquela opção.É útil para mostrar tanto a resposta dada pelo usuário quanto a resposta correta em um formato legível.
     if opcao == 'a': return pergunta.opcao_a
     if opcao == 'b': return pergunta.opcao_b
     if opcao == 'c': return pergunta.opcao_c
@@ -108,11 +109,11 @@ def get_texto_da_opcao(pergunta, opcao):
     if opcao == 'f': return "Falso"
     return ""
 
-@app.context_processor
+@app.context_processor #Este bloco torna a minha função 'get_texto_da_opcao' disponível para todos os meus arquivos HTML (templates) automaticamente. Assim, eu não preciso enviá-la manualmente em cada 'render_template'. Isso me permite chamar a função diretamente no HTML.
 def utility_processor():
     return dict(get_texto_da_opcao=get_texto_da_opcao)
 
-def validar_linha(row):
+def validar_linha(row): # Esta é a função de validação para a importação de planilhas. Ela recebe uma linha da planilha (como um dicionário), verifica cada campo para garantir que os dados estão corretos (tipo válido, data no formato certo, etc.) e retorna se a linha é válida ou não, junto com um dicionário de erros apontando as células problemáticas.
     errors = {}
     if not row.get('texto'): errors['texto'] = "O texto não pode ser vazio."
     tipo = str(row.get('tipo') or '').lower()
@@ -411,7 +412,7 @@ def exportar_respostas_detalhado():
     tipo_relatorio = request.args.get('tipo') # 'quiz' ou 'discursivas'
     filtro_acertos = request.args.get('filtro_acertos', 'todos')
 
-    # Monta a busca base
+    # Monta a busca base, já juntando as tabelas necessárias
     query = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
 
     # Aplica filtros de setor e colaborador
@@ -420,7 +421,7 @@ def exportar_respostas_detalhado():
     if usuario_selecionado_id:
         query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
     
-    # --- INÍCIO DA CORREÇÃO ---
+    # --- LÓGICA DE FILTRO CORRIGIDA ---
     # Aplica o filtro de TIPO de relatório
     if tipo_relatorio == 'quiz':
         query = query.filter(Pergunta.tipo != 'discursiva')
@@ -429,8 +430,8 @@ def exportar_respostas_detalhado():
             query = query.filter(Resposta.pontos > 0)
         elif filtro_acertos == 'erros':
             query = query.filter(Resposta.pontos == 0)
-
-    # O 'elif' agora está no nível correto
+    
+    # O 'elif' agora está no nível correto, fora do primeiro 'if'
     elif tipo_relatorio == 'discursivas':
         query = query.filter(Pergunta.tipo == 'discursiva')
         # Aplica filtro de acertos/erros para discursivas
@@ -446,7 +447,7 @@ def exportar_respostas_detalhado():
         flash("Nenhuma resposta encontrada para exportar com os filtros selecionados.", "warning")
         return redirect(url_for('pagina_analytics'))
 
-    # Processa os dados para a planilha
+    # Processa os dados e cria a planilha de acordo com o tipo
     dados_para_planilha = []
     colunas = []
     
@@ -475,9 +476,7 @@ def exportar_respostas_detalhado():
     # Cria o arquivo Excel em memória
     df = pd.DataFrame(dados_para_planilha, columns=colunas)
     output = io.BytesIO()
-    
     nome_arquivo = f'relatorio_detalhado_{tipo_relatorio}.xlsx'
-
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Relatorio Detalhado')
     output.seek(0)
