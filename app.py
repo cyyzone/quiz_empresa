@@ -470,6 +470,7 @@ def exportar_respostas_detalhado():
         download_name=nome_arquivo
     )
 
+
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
 def pagina_ranking():
