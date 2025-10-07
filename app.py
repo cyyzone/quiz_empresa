@@ -407,7 +407,7 @@ def pagina_ranking_detalhe(departamento_id):
     return render_template('ranking_detalhe.html', departamento=departamento, ranking=ranking_final)
 
 # --- ROTAS DE ADMIN ---
-# Em app.py
+
 
 @app.route('/admin', methods=['GET', 'POST'])
 def pagina_admin():
@@ -762,6 +762,49 @@ def pagina_correcoes():
                            status_selecionado=status_selecionado)
 
 # Em app.py
+
+@app.route('/admin/relatorios')
+def pagina_relatorios():
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+
+    # Busca departamentos para popular o filtro
+    departamentos = Departamento.query.order_by(Departamento.nome).all()
+    depto_selecionado_id = request.args.get('departamento_id', type=int)
+
+    # A busca principal parte dos Usuários para incluir todos, mesmo os que não responderam
+    query = db.session.query(
+        Usuario.nome,
+        Departamento.nome.label('setor_nome'),
+        func.count(Resposta.id).label('total_respostas'),
+        # Conta como "correta" se os pontos forem > 0 OU o status for 'correto' ou 'parcialmente_correto'
+        func.sum(case((or_(Resposta.pontos > 0, Resposta.status_correcao.in_(['correto', 'parcialmente_correto'])), 1), else_=0)).label('respostas_corretas'),
+        func.coalesce(func.sum(Resposta.pontos), 0).label('pontuacao_total')
+    ).select_from(Usuario).join(Departamento).outerjoin(Resposta).group_by(Usuario.id)
+
+    # Aplica o filtro de departamento, se selecionado
+    if depto_selecionado_id:
+        query = query.filter(Usuario.departamento_id == depto_selecionado_id)
+
+    resultados = query.order_by(Usuario.nome).all()
+
+    # Processa os dados para calcular o aproveitamento
+    relatorios_finais = []
+    for resultado in resultados:
+        aproveitamento = (resultado.respostas_corretas / resultado.total_respostas) * 100 if resultado.total_respostas > 0 else 0
+        relatorios_finais.append({
+            'nome': resultado.nome,
+            'setor': resultado.setor_nome,
+            'total_respostas': resultado.total_respostas,
+            'respostas_corretas': resultado.respostas_corretas,
+            'aproveitamento': aproveitamento,
+            'pontuacao_total': resultado.pontuacao_total
+        })
+
+    return render_template('relatorios.html', 
+                           relatorios=relatorios_finais, 
+                           departamentos=departamentos, 
+                           depto_selecionado_id=depto_selecionado_id)
 
 @app.route('/admin/corrigir/<int:resposta_id>', methods=['POST'])
 def corrigir_resposta(resposta_id):

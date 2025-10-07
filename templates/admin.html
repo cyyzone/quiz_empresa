@@ -23,6 +23,7 @@
     {% else %}
     
     <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary">Gerar Relatórios</a>
         <a href="{{ url_for('pagina_correcoes') }}" class="btn" style="background-color: #ffc107; color: #333;">Avaliar Atividades</a>
         <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary">Ver Relatórios de Erros</a>
         <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do Admin</a>
