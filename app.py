@@ -396,6 +396,80 @@ def minhas_respostas():
                            filtro_tipo=filtro_tipo,
                            filtro_resultado=filtro_resultado)
 
+# Em app.py
+
+# Em app.py
+
+@app.route('/admin/relatorios/exportar_detalhado')
+def exportar_respostas_detalhado():
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+
+    depto_selecionado_id = request.args.get('departamento_id', type=int)
+    # Pega o tipo de relatório a ser gerado (quiz ou discursivas)
+    tipo_relatorio = request.args.get('tipo', 'todos')
+
+    # Busca base de todas as respostas
+    query = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
+
+    # Aplica o filtro de setor, se houver
+    if depto_selecionado_id:
+        query = query.filter(Usuario.departamento_id == depto_selecionado_id)
+        
+    # Aplica o filtro de TIPO de pergunta
+    if tipo_relatorio == 'quiz':
+        query = query.filter(Pergunta.tipo != 'discursiva')
+    elif tipo_relatorio == 'discursivas':
+        query = query.filter(Pergunta.tipo == 'discursiva')
+
+    todas_as_respostas = query.order_by(Departamento.nome, Usuario.nome, Resposta.data_resposta).all()
+
+    if not todas_as_respostas:
+        flash("Nenhuma resposta encontrada para exportar com os filtros selecionados.", "warning")
+        return redirect(url_for('pagina_analytics'))
+
+    # Processa os dados e cria a planilha
+    dados_para_planilha = []
+    colunas = []
+    
+    if tipo_relatorio == 'quiz':
+        colunas = ['Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Tipo', 'Resposta Dada', 'Resposta Correta', 'Pontos']
+        for r in todas_as_respostas:
+            dados_para_planilha.append({
+                'Colaborador': r.usuario.nome, 'Setor': r.usuario.departamento.nome,
+                'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
+                'Pergunta': r.pergunta.texto, 'Tipo': r.pergunta.tipo,
+                'Resposta Dada': get_texto_da_opcao(r.pergunta, r.resposta_dada),
+                'Resposta Correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta),
+                'Pontos': r.pontos or 0
+            })
+    else: # Discursivas
+        colunas = ['Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Resposta Discursiva', 'Status', 'Feedback', 'Pontos']
+        for r in todas_as_respostas:
+             dados_para_planilha.append({
+                'Colaborador': r.usuario.nome, 'Setor': r.usuario.departamento.nome,
+                'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
+                'Pergunta': r.pergunta.texto, 'Resposta Discursiva': r.texto_discursivo,
+                'Status': r.status_correcao, 'Feedback': r.feedback_admin or '',
+                'Pontos': r.pontos or 0
+            })
+
+    df = pd.DataFrame(dados_para_planilha, columns=colunas)
+    output = io.BytesIO()
+    
+    nome_arquivo = f'relatorio_detalhado_{tipo_relatorio}.xlsx'
+
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Relatorio Detalhado')
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=nome_arquivo
+    )
+
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
 def pagina_ranking():

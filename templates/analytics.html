@@ -6,6 +6,31 @@
 <div class="dashboard-container" style="max-width: 900px;">
     <h1>Relatórios e Análises</h1>
 
+    <div style="background-color: #f0f8ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bde0ff; text-align: left;">
+    <h3 style="margin-top: 0;">Exportar Relatórios Detalhados</h3>
+    <p style="font-size: 14px; margin-bottom: 15px;">Gere uma planilha Excel com todas as respostas individuais, separadas por tipo de atividade.</p>
+    
+    <form method="get" id="export-form" style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div style="flex-grow: 1;">
+            <label for="departamento_id_export" style="font-weight: bold;">Filtrar por Setor (Opcional):</label>
+            <select name="departamento_id" id="departamento_id_export" style="width: 100%;">
+                <option value="">-- Todos os Setores --</option>
+                {% for depto in departamentos %}
+                    <option value="{{ depto.id }}">{{ depto.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div style="align-self: flex-end; display: flex; gap: 10px; margin-top: 10px;">
+            <button type="submit" formaction="{{ url_for('exportar_respostas_detalhado', tipo='quiz') }}" class="btn" style="background-color: #1a6a43;">
+                Exportar Quiz Rápido
+            </button>
+            <button type="submit" formaction="{{ url_for('exportar_respostas_detalhado', tipo='discursivas') }}" class="btn" style="background-color: #1a6a43;">
+                Exportar Discursivas
+            </button>
+        </div>
+    </form>
+</div>
+
     <div style="background-color: #66df4e; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6; text-align: left;">
         <form method="get" action="{{ url_for('pagina_analytics') }}" style="display: flex; align-items: center; gap: 15px;">
             <label for="usuario_id" style="font-weight: bold;">Filtrar por Colaborador:</label>
