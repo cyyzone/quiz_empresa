@@ -11,7 +11,7 @@
         <p class="question" style="text-align: left;">{{ pergunta.texto }}</p>
 
         {% if pergunta.imagem_pergunta %}
-            <img src="{{ pergunta.imagem_pergunta }}" 
+            <img src="{{ url_for('static', filename='uploads/' + pergunta.imagem_pergunta) }}" 
                  alt="Imagem da pergunta" 
                  style="max-width: 100%; max-height: 400px; width: auto; display: block; margin: 20px auto; border-radius: 8px;">
         {% endif %}
@@ -20,7 +20,7 @@
 
     <form method="post" enctype="multipart/form-data">
         <label for="texto_discursivo"><strong>Sua Resposta:</strong></label><br>
-        <textarea name="texto_discursivo" rows="8" style="width: 100%; box-sizing: border-box; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid #ccc;" required></textarea><br><br>
+        <textarea name="texto_discursivo" rows="8" style="width: 100%; box-sizing: border-box;" required></textarea><br><br>
 
         <label for="anexo_resposta"><strong>Anexar um arquivo (Opcional):</strong></label><br>
         <input type="file" name="anexo_resposta" accept="image/*,.pdf,.doc,.docx"><br><br>

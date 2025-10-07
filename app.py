@@ -396,27 +396,26 @@ def minhas_respostas():
                            filtro_tipo=filtro_tipo,
                            filtro_resultado=filtro_resultado)
 
-# Em app.py
-
-# Em app.py
 
 @app.route('/admin/relatorios/exportar_detalhado')
 def exportar_respostas_detalhado():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
+    # Pega os filtros da URL
     depto_selecionado_id = request.args.get('departamento_id', type=int)
-    # Pega o tipo de relatório a ser gerado (quiz ou discursivas)
+    usuario_selecionado_id = request.args.get('usuario_id', type=int)
     tipo_relatorio = request.args.get('tipo', 'todos')
 
-    # Busca base de todas as respostas
+    # Monta a busca base
     query = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
 
-    # Aplica o filtro de setor, se houver
+    # Aplica os filtros
     if depto_selecionado_id:
         query = query.filter(Usuario.departamento_id == depto_selecionado_id)
-        
-    # Aplica o filtro de TIPO de pergunta
+    if usuario_selecionado_id:
+        query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
+    
     if tipo_relatorio == 'quiz':
         query = query.filter(Pergunta.tipo != 'discursiva')
     elif tipo_relatorio == 'discursivas':
@@ -428,7 +427,7 @@ def exportar_respostas_detalhado():
         flash("Nenhuma resposta encontrada para exportar com os filtros selecionados.", "warning")
         return redirect(url_for('pagina_analytics'))
 
-    # Processa os dados e cria a planilha
+    # Processa os dados para a planilha
     dados_para_planilha = []
     colunas = []
     
@@ -454,6 +453,7 @@ def exportar_respostas_detalhado():
                 'Pontos': r.pontos or 0
             })
 
+    # Cria o arquivo Excel em memória
     df = pd.DataFrame(dados_para_planilha, columns=colunas)
     output = io.BytesIO()
     
@@ -463,6 +463,7 @@ def exportar_respostas_detalhado():
         df.to_excel(writer, index=False, sheet_name='Relatorio Detalhado')
     output.seek(0)
 
+    # Envia o arquivo para download
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -966,20 +967,30 @@ def corrigir_resposta(resposta_id):
         
     return redirect(url_for('pagina_correcoes'))
 
-@app.route('/admin/analytics')
+@@app.route('/admin/analytics')
 def pagina_analytics():
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+    
+    # Busca listas para popular os menus de filtro na tela
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
+    departamentos = Departamento.query.order_by(Departamento.nome).all()
+
+    # Pega o ID do usuário do filtro da URL, se houver
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
-    base_query = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
+
+    # --- Lógica para "Percentual de Erros por Pergunta" ---
+    base_query_stats = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
     if usuario_selecionado_id:
-        base_query = base_query.filter(Resposta.usuario_id == usuario_selecionado_id)
-    todas_as_respostas_objetivas = base_query.all()
+        base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
+
+    todas_as_respostas = base_query_stats.all()
     stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
-    for resposta in todas_as_respostas_objetivas:
+    for resposta in todas_as_respostas:
         stats_perguntas_raw[resposta.pergunta_id]['total'] += 1
         if resposta.pontos == 0:
             stats_perguntas_raw[resposta.pergunta_id]['erros'] += 1
+    
     stats_perguntas = []
     for pergunta_id, data in stats_perguntas_raw.items():
         pergunta = Pergunta.query.get(pergunta_id)
@@ -987,21 +998,36 @@ def pagina_analytics():
             percentual = (data['erros'] / data['total']) * 100 if data['total'] > 0 else 0
             stats_perguntas.append({'texto': pergunta.texto, 'total': data['total'], 'erros': data['erros'], 'percentual': percentual})
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
-    respostas_erradas_query = Resposta.query.join(Pergunta).filter(Resposta.pontos == 0, Pergunta.tipo != 'discursiva')
+
+    # --- Lógica para "Análise de Erros por Setor e Membro" ---
+    respostas_erradas_query = Resposta.query.join(Pergunta).filter(
+        Resposta.pontos == 0, 
+        Pergunta.tipo != 'discursiva'
+    )
     if usuario_selecionado_id:
         respostas_erradas_query = respostas_erradas_query.filter(Resposta.usuario_id == usuario_selecionado_id)
+    
     respostas_erradas = respostas_erradas_query.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
+    
     erros_por_setor = defaultdict(lambda: defaultdict(list))
     for r in respostas_erradas:
-        setor_nome, usuario_nome = r.usuario.departamento.nome, r.usuario.nome
+        setor_nome = r.usuario.departamento.nome
+        usuario_nome = r.usuario.nome
         erros_por_setor[setor_nome][usuario_nome].append({
-            'pergunta_texto': r.pergunta.texto, 'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'),
-            'resposta_dada': r.resposta_dada, 'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada),
-            'resposta_correta': r.pergunta.resposta_correta, 'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
+            'pergunta_texto': r.pergunta.texto,
+            'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'),
+            'resposta_dada': r.resposta_dada,
+            'texto_resposta_dada': get_texto_da_opcao(r.pergunta, r.resposta_dada),
+            'resposta_correta': r.pergunta.resposta_correta,
+            'texto_resposta_correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta)
         })
+
     return render_template('analytics.html', 
-                           stats_perguntas=stats_perguntas, erros_por_setor=erros_por_setor,
-                           usuarios_disponiveis=usuarios_disponiveis, usuario_selecionado_id=usuario_selecionado_id)
+                           stats_perguntas=stats_perguntas, 
+                           erros_por_setor=erros_por_setor,
+                           usuarios_disponiveis=usuarios_disponiveis,
+                           departamentos=departamentos,
+                           usuario_selecionado_id=usuario_selecionado_id)
 
 @app.route('/admin/upload_planilha', methods=['POST'])
 def upload_planilha():
