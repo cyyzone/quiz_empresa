@@ -22,12 +22,21 @@
                 </div>
                 <div style="flex: 1 1 250px;">
                     <label for="departamento_id" style="font-weight: bold;">Filtrar por Setor:</label>
-                    <select name="departamento_id" id="departamento_id_export" style="width: 100%;">
+                    <select name="departamento_id" style="width: 100%;">
                         <option value="">-- Todos os Setores --</option>
                         {% for depto in departamentos %}
                             <option value="{{ depto.id }}" {% if depto.id == depto_selecionado_id %}selected{% endif %}>{{ depto.nome }}</option>
                         {% endfor %}
                     </select>
+                </div>
+                <div style="flex: 1 1 150px;">
+                     <label style="font-weight: bold;">Mostrar:</label>
+                     <div style="padding-top: 10px;">
+                        <input type="radio" id="ver_erros" name="filtro_acertos" value="erros" {% if filtro_acertos == 'erros' or not filtro_acertos %}checked{% endif %}>
+                        <label for="ver_erros">Erros</label>
+                        <input type="radio" id="ver_acertos" name="filtro_acertos" value="acertos" {% if filtro_acertos == 'acertos' %}checked{% endif %} style="margin-left: 10px;">
+                        <label for="ver_acertos">Acertos</label>
+                     </div>
                 </div>
                 <div>
                     <button type="submit" formaction="{{ url_for('pagina_analytics') }}" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar Página</button>
@@ -51,13 +60,71 @@
     
     <h2>Percentual de Erros por Pergunta {% if usuario_selecionado_id or depto_selecionado_id %}<span style="font-size: 16px; color: #6c757d;">(Filtrado)</span>{% endif %}</h2>
     <div class="ranking-container" style="max-width: 900px;">
-        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pergunta</th>
+                    <th>Total de Respostas</th>
+                    <th>Respostas Incorretas</th>
+                    <th>Percentual de Erro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in stats_perguntas %}
+                <tr>
+                    <td style="white-space: normal;">{{ stat.texto }}</td>
+                    <td style="text-align: center;">{{ stat.total }}</td>
+                    <td style="text-align: center;">{{ stat.erros }}</td>
+                    <td style="text-align: center;">
+                        <strong style="color: {% if stat.percentual > 50 %}#dc3545{% elif stat.percentual > 25 %}#ffc107{% else %}#28a745{% endif %};">
+                            {{ "%.1f"|format(stat.percentual) }}%
+                        </strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align: center;">Nenhum dado de resposta para analisar com este filtro.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <hr style="margin: 40px 0;">
 
-    <h2>Análise de Erros por Setor e Membro {% if usuario_selecionado_id or depto_selecionado_id %}<span style="font-size: 16px; color: #6c757d;">(Filtrado)</span>{% endif %}</h2>
+    <h2>Análise de {{ 'Acertos' if filtro_acertos == 'acertos' else 'Erros' }} por Setor e Membro {% if usuario_selecionado_id or depto_selecionado_id %}<span style="font-size: 16px; color: #6c757d;">(Filtrado)</span>{% endif %}</h2>
     <div class="ranking-container" style="max-width: 900px; text-align: left;">
-        </div>
+        {% for setor, usuarios in dados_agrupados.items() %}
+            <h2 style="background-color: var(--cor-primaria); color: white; padding: 10px; border-radius: 8px;">Setor: {{ setor }}</h2>
+            {% for usuario, respostas in usuarios.items() %}
+                <h3 style="border-bottom: 2px solid #eee; padding-bottom: 5px; margin-top: 25px;">Membro: {{ usuario }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pergunta</th>
+                            <th>Sua Resposta</th>
+                            <th>Resposta Correta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for resposta in respostas %}
+                        <tr>
+                            <td style="white-space: normal;">{{ resposta.pergunta_texto }}</td>
+                            <td style="background-color: {{ '#d4edda' if filtro_acertos == 'acertos' else '#f8d7da' }};">
+                                <b>{{ resposta.resposta_dada.upper() if resposta.resposta_dada else '' }}</b>
+                                {% if resposta.resposta_dada %}) {{ resposta.texto_resposta_dada }}{% endif %}
+                            </td>
+                            <td>
+                                <b>{{ resposta.resposta_correta.upper() if resposta.resposta_correta else '' }}</b>
+                                {% if resposta.resposta_correta %}) {{ resposta.texto_resposta_correta }}{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endfor %}
+        {% else %}
+            <p style="text-align: center; padding-top: 20px;">Nenhum resultado encontrado com os filtros selecionados.</p>
+        {% endfor %}
+    </div>
 
     <p style="margin-top: 20px; text-align: center;"><a href="{{ url_for('pagina_admin') }}">Voltar para o Admin</a></p>
 </div>

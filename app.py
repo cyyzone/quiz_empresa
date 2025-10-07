@@ -402,24 +402,36 @@ def exportar_respostas_detalhado():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    # Pega os filtros da URL
+    # Pega todos os filtros da URL
     depto_selecionado_id = request.args.get('departamento_id', type=int)
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
-    tipo_relatorio = request.args.get('tipo', 'todos')
+    tipo_relatorio = request.args.get('tipo', 'todos') # 'quiz' ou 'discursivas'
+    filtro_acertos = request.args.get('filtro_acertos', 'todos') # 'erros' ou 'acertos'
 
     # Monta a busca base
     query = Resposta.query.join(Usuario).join(Departamento).join(Pergunta)
 
-    # Aplica os filtros
+    # Aplica os filtros de setor e colaborador
     if depto_selecionado_id:
         query = query.filter(Usuario.departamento_id == depto_selecionado_id)
     if usuario_selecionado_id:
         query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
     
+    # Aplica o filtro de TIPO de relatório
     if tipo_relatorio == 'quiz':
         query = query.filter(Pergunta.tipo != 'discursiva')
+        # Aplica filtro de acertos/erros para o quiz
+        if filtro_acertos == 'acertos':
+            query = query.filter(Resposta.pontos > 0)
+        elif filtro_acertos == 'erros':
+            query = query.filter(Resposta.pontos == 0)
     elif tipo_relatorio == 'discursivas':
         query = query.filter(Pergunta.tipo == 'discursiva')
+        # Aplica filtro de acertos/erros para discursivas
+        if filtro_acertos == 'acertos':
+            query = query.filter(Resposta.status_correcao.in_(['correto', 'parcialmente_correto']))
+        elif filtro_acertos == 'erros':
+            query = query.filter(Resposta.status_correcao == 'incorreto')
 
     todas_as_respostas = query.order_by(Departamento.nome, Usuario.nome, Resposta.data_resposta).all()
 
@@ -427,7 +439,7 @@ def exportar_respostas_detalhado():
         flash("Nenhuma resposta encontrada para exportar com os filtros selecionados.", "warning")
         return redirect(url_for('pagina_analytics'))
 
-    # Processa os dados para a planilha
+    # Processa os dados e cria a planilha
     dados_para_planilha = []
     colunas = []
     
@@ -442,7 +454,7 @@ def exportar_respostas_detalhado():
                 'Resposta Correta': get_texto_da_opcao(r.pergunta, r.pergunta.resposta_correta),
                 'Pontos': r.pontos or 0
             })
-    else: # Discursivas
+    else: # Discursivas (ou 'todos', que incluirá discursivas)
         colunas = ['Colaborador', 'Setor', 'Data da Resposta', 'Pergunta', 'Resposta Discursiva', 'Status', 'Feedback', 'Pontos']
         for r in todas_as_respostas:
              dados_para_planilha.append({
@@ -470,7 +482,6 @@ def exportar_respostas_detalhado():
         as_attachment=True,
         download_name=nome_arquivo
     )
-
 
 # --- ROTAS DE RANKING ---
 @app.route('/ranking')
@@ -975,15 +986,22 @@ def pagina_analytics():
     # Busca listas para popular os menus de filtro na tela
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
     departamentos = Departamento.query.order_by(Departamento.nome).all()
-
-    # Pega o ID do usuário do filtro da URL, se houver
+    
+    # Pega os valores dos filtros da URL
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
+    depto_selecionado_id = request.args.get('departamento_id', type=int)
+    filtro_acertos = request.args.get('filtro_acertos', 'erros') # Padrão é mostrar 'erros'
 
     # --- Lógica para "Percentual de Erros por Pergunta" ---
+    # A base da busca já exclui perguntas discursivas
     base_query_stats = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
+    
+    # Aplica filtros de usuário e departamento se estiverem selecionados
     if usuario_selecionado_id:
         base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
-
+    if depto_selecionado_id:
+        base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+    
     todas_as_respostas = base_query_stats.all()
     stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
     for resposta in todas_as_respostas:
@@ -999,21 +1017,29 @@ def pagina_analytics():
             stats_perguntas.append({'texto': pergunta.texto, 'total': data['total'], 'erros': data['erros'], 'percentual': percentual})
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
 
-    # --- Lógica para "Análise de Erros por Setor e Membro" ---
-    respostas_erradas_query = Resposta.query.join(Pergunta).filter(
-        Resposta.pontos == 0, 
-        Pergunta.tipo != 'discursiva'
-    )
+    # --- Lógica para "Análise Detalhada" (Acertos ou Erros) ---
+    query_detalhada = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
+
+    # Filtro dinâmico para ACERTOS ou ERROS
+    if filtro_acertos == 'acertos':
+        query_detalhada = query_detalhada.filter(Resposta.pontos > 0)
+    else: # Padrão é 'erros'
+        query_detalhada = query_detalhada.filter(Resposta.pontos == 0)
+        
+    # Aplica filtros de usuário e departamento
     if usuario_selecionado_id:
-        respostas_erradas_query = respostas_erradas_query.filter(Resposta.usuario_id == usuario_selecionado_id)
+        query_detalhada = query_detalhada.filter(Resposta.usuario_id == usuario_selecionado_id)
+    if depto_selecionado_id:
+        # Precisamos garantir o join com Usuario para filtrar por departamento
+        query_detalhada = query_detalhada.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
     
-    respostas_erradas = respostas_erradas_query.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
+    respostas_detalhadas = query_detalhada.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
     
-    erros_por_setor = defaultdict(lambda: defaultdict(list))
-    for r in respostas_erradas:
+    dados_agrupados = defaultdict(lambda: defaultdict(list))
+    for r in respostas_detalhadas:
         setor_nome = r.usuario.departamento.nome
         usuario_nome = r.usuario.nome
-        erros_por_setor[setor_nome][usuario_nome].append({
+        dados_agrupados[setor_nome][usuario_nome].append({
             'pergunta_texto': r.pergunta.texto,
             'data_liberacao': r.pergunta.data_liberacao.strftime('%d/%m/%Y'),
             'resposta_dada': r.resposta_dada,
@@ -1024,10 +1050,12 @@ def pagina_analytics():
 
     return render_template('analytics.html', 
                            stats_perguntas=stats_perguntas, 
-                           erros_por_setor=erros_por_setor,
+                           dados_agrupados=dados_agrupados,
                            usuarios_disponiveis=usuarios_disponiveis,
                            departamentos=departamentos,
-                           usuario_selecionado_id=usuario_selecionado_id)
+                           usuario_selecionado_id=usuario_selecionado_id,
+                           depto_selecionado_id=depto_selecionado_id,
+                           filtro_acertos=filtro_acertos)
 
 @app.route('/admin/upload_planilha', methods=['POST'])
 def upload_planilha():
