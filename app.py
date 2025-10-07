@@ -1,17 +1,20 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.sql import func, case
+# --- INÍCIO DAS IMPORTAÇÕES: Ferramentas que meu projeto precisa ---
+from flask import Flask, render_template, request, redirect, url_for, session, flash # Importo as ferramentas principais do Flask para criar as páginas,lidar com formulários, redirecionar usuários e gerenciar sessões. 
+from flask_sqlalchemy import SQLAlchemy # Importo o SQLAlchemy para conectar e conversar com meu banco de dados usando Python.
+from sqlalchemy.sql import func, case # Importo funções específicas do SQLAlchemy para fazer cálculos (como somas e contagens), e criar lógicas condicionais (case) e de OU (or_) nas buscas ao banco.
 from sqlalchemy import or_
-from collections import defaultdict
-from datetime import date, datetime, timedelta
-import os
-import io
-import pandas as pd
-from werkzeug.utils import secure_filename
-import cloudinary
+from collections import defaultdict # Importo o defaultdict, uma ferramenta útil para agrupar dados (como os erros por setor).
+from datetime import date, datetime, timedelta # Importo as ferramentas de data e hora do Python para lidar com agendamentos e timestamps.
+import os # Importo o módulo 'os' para interagir com o sistema de arquivos (ex: criar caminhos de pastas).
+import io # Importo 'io' para manipular arquivos em memória, essencial para a exportação para Excel.
+import pandas as pd # Importo a biblioteca 'pandas' para ler e criar as planilhas Excel (.xlsx) na importação/exportação.
+from werkzeug.utils import secure_filename # Importo uma função de segurança para garantir que os nomes de arquivos enviados sejam seguros.
+import cloudinary # Importo a biblioteca do Cloudinary para fazer o upload de imagens e anexos para a nuvem.
 import cloudinary.uploader
-from flask import send_file
-app = Flask(__name__)
+from flask import send_file # Importo a função 'send_file', que é a ferramenta especial do Flask  para enviar arquivos (como a minha planilha Excel) para o navegador do usuário,  forçando o início de um download.
+
+app = Flask(__name__) # Crio a instância principal da minha aplicação Flask. A variável 'app' é o coração do meu projeto.
+
 
 # --- CONFIGURAÇÕES GERAIS ---
 # Para o Render, estas chaves virão das Variáveis de Ambiente
@@ -978,29 +981,29 @@ def corrigir_resposta(resposta_id):
         
     return redirect(url_for('pagina_correcoes'))
 
+# Em app.py
+
 @app.route('/admin/analytics')
 def pagina_analytics():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
     
-    # Busca listas para popular os menus de filtro na tela
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
     departamentos = Departamento.query.order_by(Departamento.nome).all()
     
-    # Pega os valores dos filtros da URL
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
     depto_selecionado_id = request.args.get('departamento_id', type=int)
-    filtro_acertos = request.args.get('filtro_acertos', 'erros') # Padrão é mostrar 'erros'
+    filtro_acertos = request.args.get('filtro_acertos', 'erros')
 
-    # --- Lógica para "Percentual de Erros por Pergunta" ---
-    # A base da busca já exclui perguntas discursivas
+    # --- Lógica para "Percentual de Erros" ---
     base_query_stats = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
-    
-    # Aplica filtros de usuário e departamento se estiverem selecionados
     if usuario_selecionado_id:
         base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
     if depto_selecionado_id:
-        base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+        # Apenas junta com Usuario se ainda não tiver sido juntado
+        if Usuario not in [c.entity for c in base_query_stats._join_entities]:
+            base_query_stats = base_query_stats.join(Usuario)
+        base_query_stats = base_query_stats.filter(Usuario.departamento_id == depto_selecionado_id)
     
     todas_as_respostas = base_query_stats.all()
     stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
@@ -1017,20 +1020,20 @@ def pagina_analytics():
             stats_perguntas.append({'texto': pergunta.texto, 'total': data['total'], 'erros': data['erros'], 'percentual': percentual})
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
 
-    # --- Lógica para "Análise Detalhada" (Acertos ou Erros) ---
+    # --- Lógica para "Análise Detalhada" ---
     query_detalhada = Resposta.query.join(Pergunta).filter(Pergunta.tipo != 'discursiva')
 
-    # Filtro dinâmico para ACERTOS ou ERROS
     if filtro_acertos == 'acertos':
         query_detalhada = query_detalhada.filter(Resposta.pontos > 0)
-    else: # Padrão é 'erros'
+    else:
         query_detalhada = query_detalhada.filter(Resposta.pontos == 0)
         
-    # Aplica filtros de usuário e departamento
     if usuario_selecionado_id:
         query_detalhada = query_detalhada.filter(Resposta.usuario_id == usuario_selecionado_id)
+    
+    # MUDANÇA: A junção com Usuario e Departamento foi movida para o final
+    # para evitar duplicação.
     if depto_selecionado_id:
-        # Precisamos garantir o join com Usuario para filtrar por departamento
         query_detalhada = query_detalhada.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
     
     respostas_detalhadas = query_detalhada.join(Usuario).join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
