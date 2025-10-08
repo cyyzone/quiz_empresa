@@ -302,7 +302,7 @@
 {% endblock %}
 
 {% block scripts %}
-    <script>
+    {{ super() }} <script>
     function toggleQuestionFields() {
         const tipo = document.getElementById('tipo-pergunta').value;
         const camposObjetivos = document.getElementById('campos-objetivos');
