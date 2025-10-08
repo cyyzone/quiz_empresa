@@ -32,9 +32,9 @@
     {% else %}
     
     <div style="margin-bottom: 20px;">
-        <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary">Gerar Relatórios</a>
+        <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary" style="background-color: #6dd4e2">Gerar Relatórios</a>
         <a href="{{ url_for('pagina_correcoes') }}" class="btn" style="background-color: #ffc107; color: #333;">Avaliar Atividades</a>
-        <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary">Ver Relatórios de Erros</a>
+        <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary" style="background-color: #d68686"> Ver Relatórios de Erros</a>
         <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do Admin</a>
     </div>
 
@@ -378,4 +378,37 @@
             });
         });
     </script>
+    <script>
+    // Pega o formulário de cadastro de pergunta
+    const formCadastroPergunta = document.querySelector('form[action="{{ url_for('adicionar_pergunta') }}"]'); // Ajuste 'adicionar_pergunta' se o nome da sua rota for outro
+
+    if (formCadastroPergunta) {
+        formCadastroPergunta.addEventListener('submit', function(event) {
+            // Verifica o estado do checkbox "Para Todos"
+            const paraTodosCheckbox = document.getElementById('para_todos');
+            const isParaTodosChecked = paraTodosCheckbox ? paraTodosCheckbox.checked : false;
+
+            // Pega todos os checkboxes de setores individuais que estão marcados
+            const setoresChecados = document.querySelectorAll('input[name="departamentos"]:checked');
+
+            // Se "Para Todos" NÃO está marcado E NENHUM setor individual está marcado...
+            if (!isParaTodosChecked && setoresChecados.length === 0) {
+                // Mostra um alerta para o usuário
+                alert('Por favor, selecione pelo menos um setor ou marque a opção "Para Todos os Setores".');
+                
+                // Impede o envio do formulário
+                event.preventDefault();
+            }
+        });
+    }
+
+    // Sua função toggleAllSectors que você já deve ter
+    function toggleAllSectors(isTodosChecked) {
+        const checkboxes = document.querySelectorAll('#lista-setores-checkboxes input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = isTodosChecked;
+            checkbox.disabled = isTodosChecked;
+        });
+    }
+</script>
 {% endblock %}
