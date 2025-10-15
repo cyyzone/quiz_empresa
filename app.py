@@ -138,7 +138,7 @@ def validar_linha(row): # Esta é a função de validação para a importação 
     is_valid = not errors
     return is_valid, errors
 
-def _gerar_dados_relatorio(departamento_id=None):
+def _gerar_dados_relatorio(departamento_id=None): # Esta é a função que gera os dados do relatório de desempenho dos usuários.Recebe um ID de departamento opcional para filtrar os resultados por setor.Se nenhum ID for fornecido, ela gera o relatório para todos os setores.
     """Função auxiliar que busca e processa os dados para o relatório."""
     query = db.session.query(
         Usuario.nome,
@@ -175,7 +175,7 @@ def pagina_login():
     if 'usuario_id' in session: return redirect(url_for('dashboard'))
     return render_template('login.html')
 
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST']) # Esta rota processa o formulário de login. Eu pego o código de acesso que o usuário digitou, procuro no banco de dados por um usuário com esse código e, se encontrar, salvo o ID e o nome do usuário na sessão (para manter o login) e redireciono para o dashboard. Se não encontrar, mostro uma mensagem de erro e redireciono de volta para a página de login.
 def processa_login():
     codigo_inserido = request.form['codigo']
     usuario = Usuario.query.filter_by(codigo_acesso=codigo_inserido).first()
@@ -187,7 +187,7 @@ def processa_login():
         return redirect(url_for('pagina_login'))
 
 
-@app.route('/dashboard')
+@app.route('/dashboard') # Esta é a rota para o painel principal (dashboard) do usuário. Eu verifico se o usuário está logado e, se não estiver, redireciono para a página de login.Se estiver logado, eu busco no banco de dados as contagens de perguntas pendentes (quiz rápido e atividades discursivas) e a contagem de novos feedbacks (respostas corrigidas que o usuário ainda não viu).Essas contagens são então passadas para o template 'dashboard.html' para serem exibidas ao usuário.
 def dashboard():
     if 'usuario_id' not in session: 
         return redirect(url_for('pagina_login'))
@@ -197,8 +197,7 @@ def dashboard():
     hoje = date.today()
     
     perguntas_respondidas_ids = [r.pergunta_id for r in Resposta.query.filter_by(usuario_id=usuario_id).all()]
-    
-    # Contagem de Quiz Rápido Pendente (sem mudanças)
+    # Contagem de Quizzes Rápidos Pendentes
     contagem_quiz_pendente = Pergunta.query.filter(
         Pergunta.tipo != 'discursiva',
         Pergunta.data_liberacao <= hoje,
@@ -209,7 +208,7 @@ def dashboard():
         )
     ).count()
 
-    # Contagem de Atividades Discursivas Pendentes (sem mudanças)
+    # Contagem de Atividades Discursivas Pendentes 
     contagem_atividades_pendentes = Pergunta.query.filter(
         Pergunta.tipo == 'discursiva',
         Pergunta.data_liberacao <= hoje,
@@ -220,7 +219,7 @@ def dashboard():
         )
     ).count()
 
-    # MUDANÇA: Contagem de feedbacks agora verifica a nova coluna 'feedback_visto'
+    # Contagem de feedbacks agora verifica a nova coluna 'feedback_visto'
     contagem_novos_feedbacks = Resposta.query.join(Pergunta).filter(
         Resposta.usuario_id == usuario_id,
         Pergunta.tipo == 'discursiva',
@@ -234,12 +233,12 @@ def dashboard():
                            contagem_atividades=contagem_atividades_pendentes,
                            contagem_feedbacks=contagem_novos_feedbacks)
 
-@app.route('/logout')
+@app.route('/logout') # Esta rota faz o logout do usuário. Ela simplesmente limpa a sessão (removendo o 'usuario_id' e 'usuario_nome') e redireciona de volta para a página de login.
 def logout():
     session.clear()
     return redirect(url_for('pagina_login'))
 
-@app.route('/quiz')
+@app.route('/quiz') # Esta é a rota para a página do quiz rápido. Eu verifico se o usuário está logado e, se não estiver, redireciono para a página de login.Se estiver logado, eu busco a próxima pergunta disponível que o usuário ainda não respondeu (considerando o setor dele e a data de liberação).Se encontrar uma pergunta, eu a passo para o template 'quiz.html' para ser exibida. Se não houver mais perguntas disponíveis, eu mostro uma mensagem de parabéns e redireciono de volta para o dashboard.
 def pagina_quiz():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
     usuario_id = session['usuario_id']
@@ -261,7 +260,7 @@ def pagina_quiz():
         flash('Parabéns, você respondeu todas as perguntas de quiz rápido disponíveis para o seu setor!', 'success')
         return redirect(url_for('dashboard'))
 
-@app.route('/atividades')
+@app.route('/atividades')  # Esta é a rota para a página de atividades discursivas. Eu verifico se o usuário está logado e, se não estiver, redireciono para a página de login.Se estiver logado, eu busco todas as perguntas do tipo 'discursiva' que já foram liberadas e que o usuário ainda não respondeu (considerando o setor dele).Eu também busco todas as respostas que o usuário já deu para essas perguntas, para poder mostrar o status (respondida ou não) na página.Então, eu passo as atividades e as respostas dadas para o template 'atividades.html' para serem exibidas ao usuário.
 def pagina_atividades():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
     hoje = date.today()
@@ -277,8 +276,6 @@ def pagina_atividades():
     ).order_by(Pergunta.data_liberacao.desc()).all()
     respostas_dadas = {r.pergunta_id: r for r in Resposta.query.filter_by(usuario_id=usuario_id).all()}
     return render_template('atividades.html', atividades=atividades, respostas_dadas=respostas_dadas)
-
-# Dentro de app.py
 
 @app.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
 def responder_atividade(pergunta_id):
@@ -1092,6 +1089,8 @@ def preview_csv():
 
 # Em app.py
 
+# Substitua a sua função processar_edicao_csv por esta
+
 @app.route('/admin/processar_edicao_csv', methods=['POST'])
 def processar_edicao_csv():
     if not session.get('admin_logged_in'): 
@@ -1108,7 +1107,6 @@ def processar_edicao_csv():
 
     success_count = 0
     error_count = 0
-    perguntas_para_notificar = []
     
     # 2. Loop através das linhas corrigidas para salvar no banco
     for row_index in sorted(rows_data.keys()):
@@ -1128,11 +1126,16 @@ def processar_edicao_csv():
                 )
                 db.session.add(nova_pergunta)
                 
-                # if row.get('enviar_notificacao', '').lower() == 'sim':
-                #     perguntas_para_notificar.append(nova_pergunta)
+                # --- MUDANÇA PRINCIPAL AQUI ---
+                # Em vez de esperar pelo final, fazemos o commit de cada pergunta individualmente.
+                # Isto cria transações pequenas e rápidas que não sobrecarregam a base de dados.
+                db.session.commit()
+                # --- FIM DA MUDANÇA ---
                 
                 success_count += 1
             except Exception as e:
+                # Se ocorrer um erro ao salvar esta linha específica, desfazemos a tentativa (rollback)
+                # e continuamos para a próxima, sem quebrar toda a importação.
                 db.session.rollback()
                 error_count += 1
                 app.logger.error(f"Erro ao salvar linha {row_index} (após correção): {e} | Dados: {row}")
@@ -1140,11 +1143,9 @@ def processar_edicao_csv():
             error_count += 1
             app.logger.error(f"Linha {row_index} ainda inválida após edição: {errors}")
 
-    db.session.commit()
+    # O commit final não é mais necessário aqui, pois já foi feito dentro do loop.
+    # db.session.commit() <-- REMOVIDO
     
-    # for pergunta in perguntas_para_notificar:
-    #     disparar_notificacao_nova_pergunta(pergunta)
-        
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
     session.pop('csv_headers', None)
@@ -1155,8 +1156,6 @@ def processar_edicao_csv():
         flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
         
     return redirect(url_for('pagina_admin'))
-
-# Em app.py, no final do arquivo
 
 # --- ROTA DE SERVIÇO PARA INICIALIZAR/RESETAR O BANCO DE DADOS LOCAL ---
 @app.route('/_init_db/<secret_key>')
