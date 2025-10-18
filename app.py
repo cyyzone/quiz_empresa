@@ -343,7 +343,6 @@ def processa_resposta():
     db.session.commit()
     return redirect(url_for('pagina_quiz'))
 
-# Em app.py
 
 @app.route('/minhas-respostas')
 def minhas_respostas():
@@ -470,8 +469,7 @@ def exportar_respostas_detalhado():
 @app.route('/ranking')
 def pagina_ranking():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
-
-    # MUDANÇA: Usamos func.coalesce para garantir que a soma nunca seja None
+    # Consulta para obter os pontos totais por departamento
     pontos_por_depto = db.session.query(
         Departamento.nome,
         func.coalesce(func.sum(Resposta.pontos), 0).label('pontos_totais')
@@ -584,7 +582,7 @@ def pagina_admin():
 
         # 4. Executa a busca final com os filtros aplicados
         perguntas = query_perguntas.order_by(Pergunta.data_liberacao.desc(), Pergunta.id.desc()).all()
-        # --- FIM DA NOVA LÓGICA DE FILTRAGEM ---
+        # --- FIM DA NOVA LÓGICA DE FILTRAGEM DE PERGUNTAS ---
 
     return render_template('admin.html', 
                            senha_correta=senha_correta, 
@@ -630,7 +628,7 @@ def adicionar_usuario():
         flash(f'Erro: O código de acesso "{codigo}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
     
-    # MUDANÇA: A verificação de e-mail agora só acontece se um e-mail for digitado
+    # A verificação de e-mail agora só acontece se um e-mail for digitado
     if email and Usuario.query.filter_by(email=email).first():
         flash(f'Erro: O e-mail "{email}" já está em uso.', 'danger')
         return redirect(url_for('pagina_admin'))
@@ -666,7 +664,7 @@ def atualizar_usuario(usuario_id):
         flash(f'Erro: O código de acesso "{novo_codigo}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
 
-    # MUDANÇA: A verificação de e-mail agora só acontece se um e-mail for digitado
+    # A verificação de e-mail agora só acontece se um e-mail for digitado
     if novo_email and Usuario.query.filter(Usuario.id != usuario_id, Usuario.email == novo_email).first():
         flash(f'Erro: O e-mail "{novo_email}" já está em uso por outro usuário.', 'danger')
         return redirect(url_for('editar_usuario', usuario_id=usuario_id))
@@ -704,9 +702,6 @@ def adicionar_pergunta():
         data_liberacao=data_obj
     )
 
-    # =========================================================
-    # LÓGICA CORRIGIDA PARA USAR O CLOUDINARY
-    # =========================================================
     if 'imagem_pergunta' in request.files:
         file = request.files['imagem_pergunta']
         if file and file.filename != '' and allowed_file(file.filename):
@@ -716,7 +711,6 @@ def adicionar_pergunta():
             imagem_url = upload_result.get('secure_url')
             # Salva essa URL no banco de dados
             nova_pergunta.imagem_pergunta = imagem_url
-    # =========================================================
 
     if 'para_todos_setores' in request.form:
         nova_pergunta.para_todos_setores = True
@@ -742,10 +736,6 @@ def adicionar_pergunta():
     db.session.commit()
     flash('Pergunta adicionada com sucesso!', 'success')
     
-    # A lógica de notificação foi desativada para a versão local
-    # if 'enviar_notificacao' in request.form:
-    #     disparar_notificacao_nova_pergunta(nova_pergunta)
-    
     return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET'])
@@ -767,9 +757,7 @@ def atualizar_pergunta(pergunta_id):
     pergunta.texto = request.form.get('texto')
     pergunta.data_liberacao = datetime.strptime(request.form.get('data_liberacao'), '%Y-%m-%d').date()
 
-    # =========================================================
-    # LÓGICA CORRIGIDA PARA ATUALIZAR A IMAGEM USANDO CLOUDINARY
-    # =========================================================
+    # Lógica para atualizar a imagem da pergunta
     if 'imagem_pergunta' in request.files:
         file = request.files['imagem_pergunta']
         if file and file.filename != '' and allowed_file(file.filename):
@@ -785,9 +773,8 @@ def atualizar_pergunta(pergunta_id):
             imagem_url = upload_result.get('secure_url')
             # Atualiza a URL da pergunta no banco de dados
             pergunta.imagem_pergunta = imagem_url
-    # =========================================================
 
-    # Lógica para atualizar os setores (já estava correta)
+    # Atualiza os departamentos associados
     pergunta.departamentos.clear()
     if 'para_todos_setores' in request.form:
         pergunta.para_todos_setores = True
@@ -798,7 +785,6 @@ def atualizar_pergunta(pergunta_id):
             departamentos_selecionados = Departamento.query.filter(Departamento.id.in_(departamento_ids)).all()
             pergunta.departamentos = departamentos_selecionados
 
-    # Lógica para campos específicos do tipo (já estava correta)
     if pergunta.tipo in ['multipla_escolha', 'verdadeiro_falso']:
         pergunta.resposta_correta = request.form.get('resposta_correta')
         pergunta.tempo_limite = request.form.get('tempo_limite')
@@ -820,8 +806,7 @@ def excluir_pergunta(pergunta_id):
         return redirect(url_for('pagina_admin'))
         
     pergunta = Pergunta.query.get_or_404(pergunta_id)
-    
-    # --- NOVA LÓGICA PARA APAGAR ARQUIVOS DO CLOUDINARY ---
+    # --- INÍCIO DA NOVA LÓGICA PARA EXCLUIR ARQUIVOS DO CLOUDINARY ---
     try:
         # 1. Apaga a imagem da pergunta, se existir
         if pergunta.imagem_pergunta:
@@ -942,7 +927,6 @@ def corrigir_resposta(resposta_id):
     novo_status = request.form.get('status')
     feedback_texto = request.form.get('feedback', '')
     
-    # MUDANÇA: Adicionada a nova opção 'parcialmente_correto'
     if novo_status in ['correto', 'incorreto', 'parcialmente_correto']:
         resposta.status_correcao = novo_status
         resposta.feedback_admin = feedback_texto
@@ -960,8 +944,6 @@ def corrigir_resposta(resposta_id):
         flash('Ação de correção inválida.', 'danger')
         
     return redirect(url_for('pagina_correcoes'))
-
-# Em app.py
 
 @app.route('/admin/analytics')
 def pagina_analytics():
@@ -1087,10 +1069,6 @@ def preview_csv():
     headers = session.get('csv_headers', [])
     return render_template('preview_csv.html', data=validated_data, has_valid_rows=has_valid_rows, headers=headers)
 
-# Em app.py
-
-# Substitua a sua função processar_edicao_csv por esta
-
 @app.route('/admin/processar_edicao_csv', methods=['POST'])
 def processar_edicao_csv():
     if not session.get('admin_logged_in'): 
@@ -1126,15 +1104,11 @@ def processar_edicao_csv():
                 )
                 db.session.add(nova_pergunta)
                 
-                # --- MUDANÇA PRINCIPAL AQUI ---
-                # Em vez de esperar pelo final, fazemos o commit de cada pergunta individualmente.
-                # Isto cria transações pequenas e rápidas que não sobrecarregam a base de dados.
                 db.session.commit()
-                # --- FIM DA MUDANÇA ---
                 
                 success_count += 1
             except Exception as e:
-                # Se ocorrer um erro ao salvar esta linha específica, desfazemos a tentativa (rollback)
+                # Se ocorrer um erro ao salvar esta linha específica, é desfeito a tentativa (rollback)
                 # e continuamos para a próxima, sem quebrar toda a importação.
                 db.session.rollback()
                 error_count += 1
@@ -1143,9 +1117,6 @@ def processar_edicao_csv():
             error_count += 1
             app.logger.error(f"Linha {row_index} ainda inválida após edição: {errors}")
 
-    # O commit final não é mais necessário aqui, pois já foi feito dentro do loop.
-    # db.session.commit() <-- REMOVIDO
-    
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
     session.pop('csv_headers', None)
@@ -1160,7 +1131,7 @@ def processar_edicao_csv():
 # --- ROTA DE SERVIÇO PARA INICIALIZAR/RESETAR O BANCO DE DADOS LOCAL ---
 @app.route('/_init_db/<secret_key>')
 def init_db(secret_key):
-    # Use uma chave diferente da senha de admin para mais segurança
+    # Usar uma chave diferente da senha de admin para mais segurança
     if secret_key != 'resetar-banco-123':
         return "Chave secreta inválida.", 403
     try:
@@ -1200,6 +1171,5 @@ def init_db(secret_key):
         app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
 
-# Esta deve ser a última parte do seu arquivo
 if __name__ == '__main__':
     app.run(debug=True)
