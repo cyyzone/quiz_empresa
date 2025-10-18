@@ -1200,6 +1200,5 @@ def init_db(secret_key):
         app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
 
-# Esta deve ser a última parte do seu arquivo
 if __name__ == '__main__':
     app.run(debug=True)
