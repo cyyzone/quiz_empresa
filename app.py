@@ -12,6 +12,8 @@ from werkzeug.utils import secure_filename # Importo uma função de segurança 
 import cloudinary # Importo a biblioteca do Cloudinary para fazer o upload de imagens e anexos para a nuvem.
 import cloudinary.uploader
 from flask import send_file # Importo a função 'send_file', que é a ferramenta especial do Flask  para enviar arquivos (como a minha planilha Excel) para o navegador do usuário,  forçando o início de um download.
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__) # Crio a instância principal da minha aplicação Flask. A variável 'app' é o coração do meu projeto.
 
@@ -20,8 +22,9 @@ app = Flask(__name__) # Crio a instância principal da minha aplicação Flask. 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'uma-chave-secreta-local-muito-dificil') # Configuro uma chave secreta para a minha aplicação. Ela é usada pelo Flask para proteger os dados da sessão do usuário (como o login) contra manipulação. O código primeiro tenta pegar uma chave segura do ambiente do servidor (no Render).Se não encontrar, ele usa uma chave padrão para o meu ambiente local.
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///quiz.db') # Defino onde meu banco de dados está. Da mesma forma, ele primeiro procura uma URL de banco de dados no ambiente do servidor (o PostgreSQL do Render).Se não encontrar, ele usa o arquivo 'quiz.db' local (SQLite) como padrão.Isso faz com que o mesmo código funcione tanto na nuvem quanto no meu computador.
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False #Desativo uma funcionalidade do SQLAlchemy que rastreia modificações e emite sinais. Fazer isso economiza recursos e é a configuração recomendada.
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx'} # Crio uma "lista branca" de extensões de arquivo que eu permito que sejam enviadas para a minha aplicação. Isso aumenta a segurança, impedindo o upload de arquivos perigosos.
-
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx', 'xls', 'xlsx'} # Crio uma "lista branca" de extensões de arquivo que eu permito que sejam enviadas para a minha aplicação. Isso aumenta a segurança, impedindo o upload de arquivos perigosos.
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+# A opção 'pool_pre_ping' ajuda a manter a conexão com o banco de dados estável, verificando se a conexão ainda está ativa antes de usá-la. Isso é especialmente útil em ambientes de nuvem onde conexões podem expirar.
 # --- CONFIGURAÇÃO DO CLOUDINARY (Lê das Variáveis de Ambiente) ---
 # Aqui, eu preparo a conexão da minha aplicação com o serviço do Cloudinary,que é o "HD externo na nuvem" onde eu guardo minhas imagens e anexos.
 cloudinary.config(
