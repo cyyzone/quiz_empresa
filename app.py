@@ -12,8 +12,7 @@ from werkzeug.utils import secure_filename # Importo uma função de segurança 
 import cloudinary # Importo a biblioteca do Cloudinary para fazer o upload de imagens e anexos para a nuvem.
 import cloudinary.uploader
 from flask import send_file # Importo a função 'send_file', que é a ferramenta especial do Flask  para enviar arquivos (como a minha planilha Excel) para o navegador do usuário,  forçando o início de um download.
-from dotenv import load_dotenv
-load_dotenv()
+# --- FIM DAS IMPORTAÇÕES ---
 
 app = Flask(__name__) # Crio a instância principal da minha aplicação Flask. A variável 'app' é o coração do meu projeto.
 
