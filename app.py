@@ -60,11 +60,11 @@ class Usuario(db.Model): # Crio a tabela para guardar as informações dos colab
 class Pergunta(db.Model):  # Crio a tabela principal, que armazena todas as perguntas do quiz.
     id = db.Column(db.Integer, primary_key=True) # A chave primária para cada pergunta.
     tipo = db.Column(db.String(20), nullable=False, default='multipla_escolha') # O tipo da pergunta (ex: 'discursiva'), o padrão é múltipla escolha.
-    texto = db.Column(db.String(500), nullable=False) # O enunciado da pergunta.
-    opcao_a = db.Column(db.String(500), nullable=True) # As colunas para as opções de múltipla escolha. Podem ser nulas para outros tipos de pergunta.
-    opcao_b = db.Column(db.String(500), nullable=True) 
-    opcao_c = db.Column(db.String(500), nullable=True)
-    opcao_d = db.Column(db.String(500), nullable=True)
+    texto = db.Column(db.Text, nullable=False) # O enunciado da pergunta.
+    opcao_a = db.Column(db.Text, nullable=True)
+    opcao_b = db.Column(db.Text, nullable=True)
+    opcao_c = db.Column(db.Text, nullable=True)
+    opcao_d = db.Column(db.Text, nullable=True)
     resposta_correta = db.Column(db.String(1), nullable=True) # A resposta correta ('a', 'b', 'v', etc.). Pode ser nula para perguntas discursivas.
     data_liberacao = db.Column(db.Date, nullable=False) # A data a partir da qual a pergunta fica disponível.
     tempo_limite = db.Column(db.Integer, nullable=True) # O tempo limite para responder (em segundos). Pode ser nulo para perguntas discursivas.
