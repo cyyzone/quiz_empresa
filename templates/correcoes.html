@@ -5,13 +5,10 @@
 {% block content %}
 <div class="dashboard-container" style="max-width: 900px; text-align: left;">
     <h1 style="text-align: center;">Avaliação de Atividades Discursivas</h1>
-    <p style="text-align: center;">Revise as respostas enviadas pelos usuários e, se desejar, deixe um feedback para o
-        usuário.</p>
+    <p style="text-align: center;">Revise as respostas enviadas pelos usuários e deixe um feedback.</p>
 
-    <div
-        style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6;">
-        <form method="get" action="{{ url_for('pagina_correcoes') }}"
-            style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6;">
+        <form method="get" action="{{ url_for('pagina_correcoes') }}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div style="flex: 1 1 300px;">
                 <label for="usuario_id" style="font-weight: bold;">Filtrar por Colaborador:</label>
                 <select name="usuario_id" onchange="this.form.submit()" style="width: 100%;">
@@ -26,20 +23,16 @@
             <div style="flex: 1 1 200px;">
                 <label for="status" style="font-weight: bold;">Filtrar por Status:</label>
                 <select name="status" onchange="this.form.submit()" style="width: 100%;">
-                    <option value="pendente" {% if status_selecionado=='pendente' %}selected{% endif %}>Pendentes
-                    </option>
+                    <option value="pendente" {% if status_selecionado=='pendente' %}selected{% endif %}>Pendentes</option>
                     <option value="correto" {% if status_selecionado=='correto' %}selected{% endif %}>Corretas</option>
-                    <option value="parcialmente_correto" {% if status_selecionado=='parcialmente_correto' %}selected{%
-                        endif %}>Parcialmente Corretas</option>
-                    <option value="incorreto" {% if status_selecionado=='incorreto' %}selected{% endif %}>Incorretas
-                    </option>
+                    <option value="parcialmente_correto" {% if status_selecionado=='parcialmente_correto' %}selected{% endif %}>Parcialmente Corretas</option>
+                    <option value="incorreto" {% if status_selecionado=='incorreto' %}selected{% endif %}>Incorretas</option>
                     <option value="todos" {% if status_selecionado=='todos' %}selected{% endif %}>Todas</option>
                 </select>
             </div>
             <div style="align-self: flex-end;">
                 <button type="submit" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar</button>
-                <a href="{{ url_for('pagina_correcoes') }}" class="btn btn-secondary"
-                    style="padding: 10px 15px; margin: 0;">Limpar</a>
+                <a href="{{ url_for('pagina_correcoes') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
             </div>
         </form>
     </div>
@@ -47,12 +40,9 @@
     <hr style="margin: 30px 0;">
 
     {% for resposta in respostas %}
-    <div
-        style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;
-                    border-left: 5px solid {{ '#ffc107' if resposta.status_correcao == 'pendente' else '#28a745' if resposta.status_correcao == 'correto' else '#fd7e14' if resposta.status_correcao == 'parcialmente_correto' else '#dc3545' }};">
+    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid {{ '#ffc107' if resposta.status_correcao == 'pendente' else '#28a745' if resposta.status_correcao == 'correto' else '#fd7e14' if resposta.status_correcao == 'parcialmente_correto' else '#dc3545' }};">
 
-        <div
-            style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
             <div>
                 <strong>Usuário:</strong> {{ resposta.usuario.nome }} ({{ resposta.usuario.departamento.nome }})<br>
                 <strong>Enviado em:</strong> {{ resposta.data_resposta | datetime_local }}
@@ -71,9 +61,17 @@
         </div>
 
         <p><strong>Pergunta:</strong> {{ resposta.pergunta.texto }}</p>
-        {% if resposta.pergunta.imagem_pergunta %}
-        <img src="{{ resposta.pergunta.imagem_pergunta }}" alt="Imagem da pergunta"
-            style="max-width: 100%; max-height: 200px; width: auto; display: block; margin: 10px auto; border-radius: 8px;">
+        
+        {% if resposta.pergunta.imagem_pergunta and not resposta.pergunta.imagens_extra %}
+            <img src="{{ resposta.pergunta.imagem_pergunta }}" alt="Imagem da pergunta" style="max-width: 100%; max-height: 200px; width: auto; display: block; margin: 10px auto; border-radius: 8px;">
+        {% endif %}
+
+        {% if resposta.pergunta.imagens_extra %}
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0;">
+                {% for img in resposta.pergunta.imagens_extra %}
+                    <img src="{{ img.url }}" alt="Imagem pergunta {{ loop.index }}" style="max-width: 100%; max-height: 200px; border-radius: 8px;">
+                {% endfor %}
+            </div>
         {% endif %}
 
         <div style="background-color: white; padding: 15px; border-radius: 5px; margin-top: 10px;">
@@ -82,17 +80,21 @@
         </div>
 
         {% if resposta.anexos_extra %}
-        <div style="margin-top: 15px;">
-            <strong>Anexos enviados:</strong><br>
-            {% for anexo in resposta.anexos_extra %}
-                <a href="{{ anexo.url }}" target="_blank" class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
-                    Ver Anexo {{ loop.index }}
-                </a>
-            {% endfor %}
-        </div>
-    {% elif resposta.anexo_resposta %}
-        <a href="{{ resposta.anexo_resposta }}" target="_blank">Ver Anexo Antigo</a>
-    {% endif %}
+            <div style="margin-top: 15px;">
+                <strong>Anexos enviados pelo usuário:</strong><br>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;">
+                    {% for anexo in resposta.anexos_extra %}
+                        <a href="{{ anexo.url }}" target="_blank" class="btn btn-sm" style="font-size: 14px; padding: 8px 15px; background-color: #6c757d; color: white;">
+                            📄 Ver Anexo {{ loop.index }}
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+        {% elif resposta.anexo_resposta %}
+            <div style="margin-top: 15px;">
+                <a href="{{ resposta.anexo_resposta }}" target="_blank" style="font-weight: bold;">Ver Anexo (Antigo)</a>
+            </div>
+        {% endif %}
 
         {% if resposta.status_correcao == 'pendente' %}
         <form action="{{ url_for('corrigir_resposta', resposta_id=resposta.id) }}" method="post">
@@ -101,18 +103,15 @@
                 <textarea name="feedback" rows="3" style="width: 100%; box-sizing: border-box;"></textarea>
             </div>
             <div style="text-align: right; margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
-                <button type="submit" name="status" value="incorreto" class="btn btn-secondary"
-                    style="background-color: #dc3545;">Incorreta</button>
-                <button type="submit" name="status" value="parcialmente_correto" class="btn btn-secondary"
-                    style="background-color: #ffc107; color: #333;">Parcial</button>
+                <button type="submit" name="status" value="incorreto" class="btn btn-secondary" style="background-color: #dc3545;">Incorreta</button>
+                <button type="submit" name="status" value="parcialmente_correto" class="btn btn-secondary" style="background-color: #ffc107; color: #333;">Parcial</button>
                 <button type="submit" name="status" value="correto" class="btn">Correta</button>
             </div>
         </form>
         {% else %}
         <div style="margin-top: 20px; padding: 15px; border-radius: 5px; background-color: #e9ecef;">
             <strong>Feedback enviado:</strong>
-            <p style="white-space: pre-wrap; margin-top: 5px; margin-bottom: 0;">{{ resposta.feedback_admin or '(Nenhum
-                feedback foi enviado)' }}</p>
+            <p style="white-space: pre-wrap; margin-top: 5px; margin-bottom: 0;">{{ resposta.feedback_admin or '(Nenhum feedback foi enviado)' }}</p>
         </div>
         {% endif %}
     </div>

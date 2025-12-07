@@ -89,19 +89,21 @@ class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pe
 
 # --- NOVOS MODELOS PARA MÚLTIPLOS ARQUIVOS ---
 
+# No arquivo app.py
+
 class ImagemPergunta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(300), nullable=False)
     pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False)
-    # Cria a relação para podermos usar: pergunta.imagens_extra
-    pergunta = db.relationship('Pergunta', backref=db.backref('imagens_extra', lazy=True))
+    
+    pergunta = db.relationship('Pergunta', backref=db.backref('imagens_extra', lazy=True, cascade='all, delete-orphan'))
 
 class AnexoResposta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(300), nullable=False)
     resposta_id = db.Column(db.Integer, db.ForeignKey('resposta.id'), nullable=False)
-    # Cria a relação para podermos usar: resposta.anexos_extra
-    resposta = db.relationship('Resposta', backref=db.backref('anexos_extra', lazy=True))
+    
+    resposta = db.relationship('Resposta', backref=db.backref('anexos_extra', lazy=True, cascade='all, delete-orphan'))
 
 # --- FUNÇÕES AUXILIARES ---
 # Criei esta seção para agrupar pequenas funções que são reutilizadas em várias partes do meu projeto.

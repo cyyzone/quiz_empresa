@@ -10,10 +10,20 @@
         
         <p class="question" style="text-align: left;">{{ pergunta.texto }}</p>
 
-        {% if pergunta.imagem_pergunta %}
+        {% if pergunta.imagem_pergunta and not pergunta.imagens_extra %}
             <img src="{{ pergunta.imagem_pergunta }}" 
                  alt="Imagem da pergunta" 
                  style="max-width: 100%; max-height: 400px; width: auto; display: block; margin: 20px auto; border-radius: 8px;">
+        {% endif %}
+
+        {% if pergunta.imagens_extra %}
+            <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 20px;">
+                {% for img in pergunta.imagens_extra %}
+                    <img src="{{ img.url }}" 
+                         alt="Imagem extra {{ loop.index }}" 
+                         style="max-width: 100%; max-height: 300px; width: auto; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                {% endfor %}
+            </div>
         {% endif %}
         
     </div>
