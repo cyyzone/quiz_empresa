@@ -4,6 +4,9 @@
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 900px; text-align: left;">
+    <div style="text-align: center; margin-top: 30px;">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+    </div>
     <h1 style="text-align: center;">📋 Minhas Respostas 📋</h1>
     <p style="text-align: center;">Acompanhe o status e o feedback das suas atividades.</p>
 
@@ -35,7 +38,7 @@
         </form>
     </div>
 
-    {% for resposta in respostas %}
+    {% for resposta in respostas.items %}
         <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
             <p style="font-size: 20px; font-weight: bold; margin-bottom: 15px;">{{ resposta.pergunta.texto }}</p>
             
@@ -65,15 +68,15 @@
                     <strong>Sua resposta:</strong> ({{ resposta.resposta_dada.upper() if resposta.resposta_dada else '' }}) {{ get_texto_da_opcao(resposta.pergunta, resposta.resposta_dada) }}
                 </p>
                 {% if resposta.pontos == 0 %}
-                <p style="padding: 10px; border-radius: 5px; background-color: #d4edda;">
-                    <strong>Resposta correta:</strong> ({{ resposta.pergunta.resposta_correta.upper() }}) ...
-                </p>
+                    <p style="padding: 10px; border-radius: 5px; background-color: #d4edda;">
+                        <strong>Resposta correta:</strong> ({{ resposta.pergunta.resposta_correta.upper() }}) {{ get_texto_da_opcao(resposta.pergunta, resposta.pergunta.resposta_correta) }}
+                    </p>
                 {% endif %}
                 
                 {% if resposta.pergunta.explicacao %}
-                <div style="margin-top: 10px; padding: 10px; background-color: #e2e6ea; border-radius: 5px; font-size: 0.95em;">
-                    <strong>💡 Explicação:</strong> {{ resposta.pergunta.explicacao }}
-                </div>
+                    <div style="margin-top: 10px; padding: 10px; background-color: #e9ecef; border-radius: 5px; font-size: 0.9em; border-left: 4px solid #17a2b8;">
+                        <strong>💡 Explicação:</strong> {{ resposta.pergunta.explicacao }}
+                    </div>
                 {% endif %}
             {% endif %}
         </div>
@@ -81,8 +84,26 @@
         <p style="text-align: center; padding: 20px;">Nenhuma resposta encontrada com os filtros selecionados.</p>
     {% endfor %}
 
-    <div style="text-align: center; margin-top: 30px;">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+    {% if respostas.pages > 1 %}
+    <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
+        
+        {% if respostas.has_prev %}
+            <a href="{{ url_for('minhas_respostas', page=respostas.prev_num, filtro_tipo=filtro_tipo, filtro_resultado=filtro_resultado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                &laquo; Anterior
+            </a>
+        {% endif %}
+
+        <span style="font-weight: bold; color: #555;">
+            Página {{ respostas.page }} de {{ respostas.pages }}
+        </span>
+
+        {% if respostas.has_next %}
+            <a href="{{ url_for('minhas_respostas', page=respostas.next_num, filtro_tipo=filtro_tipo, filtro_resultado=filtro_resultado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                Próximo &raquo;
+            </a>
+        {% endif %}
+        
     </div>
+    {% endif %}
 </div>
 {% endblock %}

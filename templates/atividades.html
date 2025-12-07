@@ -4,11 +4,14 @@
 
 {% block content %}
 <div class="dashboard-container" style="max-width: 900px; text-align: left;">
+    <div style="text-align: center; margin-top: 30px;">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+    </div>
     <h1 style="text-align: center;">📝 Atividades Discursivas 📝</h1>
     <p style="text-align: center;">Estas são atividades sem tempo para aprofundar seu conhecimento. Suas respostas serão avaliadas por um administrador.</p>
     <hr style="margin: 30px 0;">
 
-    {% for atividade in atividades %}
+    {% for atividade in atividades.items %}
         <div style="display: flex; align-items: center; justify-content: space-between; background-color: #f9f9f9; padding: 15px 20px; border-radius: 8px; margin-bottom: 15px;">
             <div>
                 <h3 style="margin: 0 0 5px 0;">{{ atividade.texto }}</h3>
@@ -28,8 +31,26 @@
         </div>
     {% endfor %}
 
-    <div style="text-align: center; margin-top: 30px;">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+    {% if atividades.pages > 1 %}
+    <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
+        
+        {% if atividades.has_prev %}
+            <a href="{{ url_for('pagina_atividades', page=atividades.prev_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                &laquo; Anterior
+            </a>
+        {% endif %}
+
+        <span style="font-weight: bold; color: #555;">
+            Página {{ atividades.page }} de {{ atividades.pages }}
+        </span>
+
+        {% if atividades.has_next %}
+            <a href="{{ url_for('pagina_atividades', page=atividades.next_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                Próximo &raquo;
+            </a>
+        {% endif %}
+        
     </div>
+    {% endif %}
 </div>
 {% endblock %}

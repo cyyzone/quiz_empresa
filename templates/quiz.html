@@ -15,7 +15,7 @@
     {% if pergunta.imagens_extra %}
         <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
             {% for img in pergunta.imagens_extra %}
-                <img src="{{ img.url }}" alt="Imagem extra" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+                <img src="{{ img.url | otimizar_img }}" alt="Imagem extra" style="max-width: 100%; max-height: 300px; border-radius: 8px;">
             {% endfor %}
         </div>
     {% endif %}

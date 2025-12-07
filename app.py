@@ -2,7 +2,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash # Importo as ferramentas principais do Flask para criar as páginas,lidar com formulários, redirecionar usuários e gerenciar sessões. 
 from flask_sqlalchemy import SQLAlchemy # Importo o SQLAlchemy para conectar e conversar com meu banco de dados usando Python.
 from sqlalchemy.sql import func, case # Importo funções específicas do SQLAlchemy para fazer cálculos (como somas e contagens), e criar lógicas condicionais (case) e de OU (or_) nas buscas ao banco.
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from collections import defaultdict # Importo o defaultdict, uma ferramenta útil para agrupar dados (como os erros por setor).
 from datetime import date, datetime, timedelta # Importo as ferramentas de data e hora do Python para lidar com agendamentos e timestamps.
 import os # Importo o módulo 'os' para interagir com o sistema de arquivos (ex: criar caminhos de pastas).
@@ -120,6 +120,20 @@ def format_datetime_local(valor_utc):
     # Subtrai 3 horas do tempo UTC
     fuso_local = valor_utc - timedelta(hours=3)
     return fuso_local.strftime('%d/%m/%Y às %H:%M')
+
+@app.template_filter('otimizar_img')
+def otimizar_img_filter(url):
+    """
+    Insere parâmetros do Cloudinary para reduzir tamanho e manter qualidade.
+    w_800: Largura máxima de 800px (não precisa ser maior que a tela).
+    q_auto: Qualidade automática (comprime sem perder nitidez visível).
+    f_auto: Formato automático (entrega WebP para Chrome, etc).
+    """
+    if not url:
+        return ""
+    if 'cloudinary.com' in url and '/upload/' in url:
+        return url.replace('/upload/', '/upload/w_800,q_auto,f_auto/')
+    return url
 
 def get_texto_da_opcao(pergunta, opcao): # Esta função recebe uma pergunta e uma letra de opção ('a', 'b', 'v', etc.) e retorna o texto completo daquela opção.É útil para mostrar tanto a resposta dada pelo usuário quanto a resposta correta em um formato legível.
     if opcao == 'a': return pergunta.opcao_a
@@ -281,22 +295,51 @@ def pagina_quiz():
         flash('Parabéns, você respondeu todas as perguntas de quiz rápido disponíveis para o seu setor!', 'success')
         return redirect(url_for('dashboard'))
 
-@app.route('/atividades')  # Esta é a rota para a página de atividades discursivas. Eu verifico se o usuário está logado e, se não estiver, redireciono para a página de login.Se estiver logado, eu busco todas as perguntas do tipo 'discursiva' que já foram liberadas e que o usuário ainda não respondeu (considerando o setor dele).Eu também busco todas as respostas que o usuário já deu para essas perguntas, para poder mostrar o status (respondida ou não) na página.Então, eu passo as atividades e as respostas dadas para o template 'atividades.html' para serem exibidas ao usuário.
+@app.route('/atividades')
 def pagina_atividades():
     if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
+    
     hoje = date.today()
     usuario_id = session['usuario_id']
     usuario = Usuario.query.get(usuario_id)
-    atividades = Pergunta.query.filter(
+
+    # Paginação
+    page = request.args.get('page', 1, type=int)
+    per_page = 5 
+
+    # --- NOVA LÓGICA DE ORDENAÇÃO ---
+    # 1. db.session.query(Pergunta): Começamos buscando perguntas.
+    # 2. .outerjoin(...): Juntamos com a tabela de respostas, mas APENAS as respostas DESTE usuário.
+    #    (Isso permite saber quais perguntas ESSE usuário específico já respondeu).
+    query_atividades = db.session.query(Pergunta).outerjoin(
+        Resposta, 
+        and_(Resposta.pergunta_id == Pergunta.id, Resposta.usuario_id == usuario_id)
+    ).filter(
         Pergunta.tipo == 'discursiva',
         Pergunta.data_liberacao <= hoje,
         or_(
             Pergunta.para_todos_setores == True,
             Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
         )
-    ).order_by(Pergunta.data_liberacao.desc()).all()
+    ).order_by(
+        # 3. AQUI ESTÁ O SEGREDO:
+        # Resposta.id.isnot(None) retorna True (1) se tiver resposta e False (0) se não tiver.
+        # Ordenando de forma crescente (padrão), o 0 (Não respondidas) vem antes do 1 (Respondidas).
+        Resposta.id.isnot(None),
+        
+        # Critério de desempate: Data de liberação (mais novas primeiro)
+        Pergunta.data_liberacao.desc()
+    )
+
+    # Aplica a paginação na query modificada
+    atividades_pagination = query_atividades.paginate(page=page, per_page=per_page, error_out=False)
+
+    # Busca as respostas para pintar o "✔️ Respondido" no HTML
     respostas_dadas = {r.pergunta_id: r for r in Resposta.query.filter_by(usuario_id=usuario_id).all()}
-    return render_template('atividades.html', atividades=atividades, respostas_dadas=respostas_dadas)
+    
+    return render_template('atividades.html', 
+                           atividades=atividades_pagination, 
+                           respostas_dadas=respostas_dadas)
 
 @app.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
 def responder_atividade(pergunta_id):
@@ -415,6 +458,10 @@ def minhas_respostas():
     # Filtros
     filtro_tipo = request.args.get('filtro_tipo', '')
     filtro_resultado = request.args.get('filtro_resultado', '')
+    
+    # --- PAGINAÇÃO (ESTA É A PARTE QUE FALTA NO SEU ARQUIVO) ---
+    page = request.args.get('page', 1, type=int)
+    per_page = 10  # 10 itens por página
 
     query = Resposta.query.filter_by(usuario_id=usuario_id)
 
@@ -430,10 +477,11 @@ def minhas_respostas():
     elif filtro_resultado == 'pendentes':
         query = query.filter(Resposta.status_correcao == 'pendente')
     
-    respostas_usuario = query.order_by(Resposta.data_resposta.desc()).all()
+    # Usa .paginate() em vez de .all()
+    respostas_pagination = query.order_by(Resposta.data_resposta.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template('minhas_respostas.html', 
-                           respostas=respostas_usuario,
+                           respostas=respostas_pagination, # Passa o objeto paginado
                            filtro_tipo=filtro_tipo,
                            filtro_resultado=filtro_resultado)
 
@@ -574,29 +622,24 @@ def pagina_admin():
         else:
             flash('Senha incorreta!', 'danger')
     
-    perguntas, usuarios, departamentos = [], [], []
+    # Inicializa 'perguntas' como None ou lista vazia para evitar erro se não estiver logado
+    perguntas = None 
+    usuarios, departamentos = [], []
     contagem_pendentes = 0
-    
-    # Dicionário para passar os valores dos filtros de volta para o template
     filtros_ativos = {}
 
     if senha_correta:
-        # Busca inicial de dados para os formulários
         usuarios = Usuario.query.join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
         departamentos = Departamento.query.order_by(Departamento.nome).all()
         contagem_pendentes = Resposta.query.join(Pergunta).filter(Pergunta.tipo == 'discursiva', Resposta.status_correcao == 'pendente').count()
 
-        # --- INÍCIO DA NOVA LÓGICA DE FILTRAGEM DE PERGUNTAS ---
-        
-        # 1. Começa com uma busca base para todas as perguntas
+        # --- Lógica de Filtros ---
         query_perguntas = Pergunta.query
 
-        # 2. Pega os valores dos filtros da URL (se existirem)
-        filtro_mes = request.args.get('filtro_mes') # Ex: '2025-10'
+        filtro_mes = request.args.get('filtro_mes')
         filtro_setor_id = request.args.get('filtro_setor', type=int)
         filtro_tipo = request.args.get('filtro_tipo')
 
-        # 3. Aplica os filtros na busca, um por um
         if filtro_mes:
             try:
                 ano, mes = map(int, filtro_mes.split('-'))
@@ -606,7 +649,7 @@ def pagina_admin():
                 )
                 filtros_ativos['mes'] = filtro_mes
             except:
-                pass # Ignora filtro de data mal formatado
+                pass
 
         if filtro_setor_id:
             query_perguntas = query_perguntas.filter(
@@ -621,9 +664,13 @@ def pagina_admin():
             query_perguntas = query_perguntas.filter(Pergunta.tipo == filtro_tipo)
             filtros_ativos['tipo'] = filtro_tipo
 
-        # 4. Executa a busca final com os filtros aplicados
-        perguntas = query_perguntas.order_by(Pergunta.data_liberacao.desc(), Pergunta.id.desc()).all()
-        # --- FIM DA NOVA LÓGICA DE FILTRAGEM DE PERGUNTAS ---
+        page = request.args.get('page', 1, type=int)
+        per_page = 10 
+        
+        perguntas = query_perguntas.order_by(
+            Pergunta.data_liberacao.desc(), 
+            Pergunta.id.desc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template('admin.html', 
                            senha_correta=senha_correta, 
@@ -631,7 +678,7 @@ def pagina_admin():
                            usuarios=usuarios, 
                            departamentos=departamentos,
                            contagem_pendentes=contagem_pendentes,
-                           filtros=filtros_ativos) # Envia os filtros ativos para o template
+                           filtros=filtros_ativos)
 
 @app.route('/admin/add_department', methods=['POST'])
 def adicionar_setor():

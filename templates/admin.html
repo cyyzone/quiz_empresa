@@ -8,11 +8,9 @@
         <button class="open-help-modal help-button"
             data-help-text="Esta é a área de gerenciamento. Use as seções abaixo para:
             
-            • Gerenciar Setores: Crie ou exclua os setores da empresa. Lembre-se que um setor só pode ser excluído se não tiver usuários.
-            
-            • Gerenciar Usuários: Adicione novos colaboradores, edite suas informações (incluindo movê-los de setor) ou exclua-os.
-            
-            • Gerenciar Perguntas: Crie perguntas individualmente, importe em massa via planilha Excel ou filtre a lista de perguntas existentes para editar ou excluir.">?</button>
+            • Gerenciar Setores: Crie ou exclua os setores da empresa.
+            • Gerenciar Usuários: Adicione, edite ou exclua colaboradores.
+            • Gerenciar Perguntas: Crie, importe ou edite perguntas.">?</button>
     </h1>
 
     {% if contagem_pendentes > 0 %}
@@ -33,25 +31,19 @@
     {% else %}
 
     <div style="margin-bottom: 20px;">
-        <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary" style="background-color: #6dd4e2">Gerar
-            Relatórios</a>
-        <a href="{{ url_for('pagina_correcoes') }}" class="btn" style="background-color: #ffc107; color: #333;">Avaliar
-            Atividades</a>
-        <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary" style="background-color: #d68686"> Ver
-            Relatórios de Erros</a>
-        <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do
-            Admin</a>
+        <a href="{{ url_for('pagina_relatorios') }}" class="btn btn-secondary" style="background-color: #6dd4e2">Gerar Relatórios</a>
+        <a href="{{ url_for('pagina_correcoes') }}" class="btn" style="background-color: #ffc107; color: #333;">Avaliar Atividades</a>
+        <a href="{{ url_for('pagina_analytics') }}" class="btn btn-secondary" style="background-color: #d68686"> Ver Relatórios de Erros</a>
+        <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do Admin</a>
     </div>
 
     <button class="accordion-trigger" id="accordion-setores">Gerenciar Setores</button>
     <div class="accordion-panel">
         <div style="padding: 20px 0;">
-            <div
-                style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
                 <div style="flex: 1; min-width: 300px;">
                     <h3>Adicionar Novo Setor</h3>
-                    <form action="{{ url_for('adicionar_setor') }}" method="post"
-                        style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                    <form action="{{ url_for('adicionar_setor') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
                         <label for="nome">Nome do Setor:</label><br>
                         <input type="text" name="nome" style="width: 100%;" required><br><br>
                         <button type="submit" class="btn">Salvar Setor</button>
@@ -61,22 +53,14 @@
                     <h3>Setores Cadastrados</h3>
                     <div class="ranking-container" style="max-height: 250px; overflow-y: auto;">
                         <table>
-                            <thead>
-                                <tr>
-                                    <th>Nome</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>Nome</th><th>Ações</th></tr></thead>
                             <tbody>
                                 {% for depto in departamentos %}
                                 <tr>
                                     <td>{{ depto.nome }}</td>
                                     <td>
-                                        <form action="{{ url_for('excluir_setor', departamento_id=depto.id) }}"
-                                            method="post"
-                                            onsubmit="return confirm('Atenção: Só é possível excluir um setor que não tenha NENHUM usuário. Deseja tentar?');">
-                                            <button type="submit"
-                                                style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        <form action="{{ url_for('excluir_setor', departamento_id=depto.id) }}" method="post" onsubmit="return confirm('Atenção: Só é possível excluir um setor que não tenha NENHUM usuário. Deseja tentar?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -92,12 +76,10 @@
     <button class="accordion-trigger" id="accordion-usuarios">Gerenciar Usuários</button>
     <div class="accordion-panel">
         <div style="padding: 20px 0;">
-            <div
-                style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
                 <div style="flex: 1; min-width: 300px;">
                     <h3>Adicionar Novo Usuário</h3>
-                    <form action="{{ url_for('adicionar_usuario') }}" method="post"
-                        style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                    <form action="{{ url_for('adicionar_usuario') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
                         <label for="nome">Nome do Colaborador:</label><br>
                         <input type="text" name="nome" style="width: 100%;" required><br><br>
                         <label for="email">E-mail (Opcional):</label><br>
@@ -134,13 +116,9 @@
                                     <td>{{ usuario.departamento.nome }}</td>
                                     <td style="text-align: center; font-weight: bold;">{{ usuario.codigo_acesso }}</td>
                                     <td style="display: flex; gap: 5px;">
-                                        <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}"
-                                            style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
-                                        <form action="{{ url_for('excluir_usuario', usuario_id=usuario.id) }}"
-                                            method="post"
-                                            onsubmit="return confirm('Tem certeza que deseja excluir {{ usuario.nome }}?');">
-                                            <button type="submit"
-                                                style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        <a href="{{ url_for('editar_usuario', usuario_id=usuario.id) }}" style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
+                                        <form action="{{ url_for('excluir_usuario', usuario_id=usuario.id) }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir {{ usuario.nome }}?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -156,34 +134,21 @@
     <button class="accordion-trigger" id="accordion-perguntas">Gerenciar Perguntas</button>
     <div class="accordion-panel">
         <div style="padding: 20px 0;">
-            <div
-                style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+            <div style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
                 <h3>Importar Perguntas (Planilha)</h3>
-
                 <p style="font-size: 14px; margin-bottom: 20px;">
-                    Para facilitar o preenchimento, use nosso modelo padrão.
-                    <br>
-                    <a href="{{ url_for('static', filename='downloads/template_importacao.xlsx') }}"
-                        download="template_importacao.xlsx" style="font-weight: bold;">
+                    <a href="{{ url_for('static', filename='downloads/template_importacao.xlsx') }}" download="template_importacao.xlsx" style="font-weight: bold;">
                         ➡️ Baixar planilha modelo (.xlsx)
                     </a>
                 </p>
                 <div class="import-instructions">
                     <strong>Como preencher a planilha:</strong>
                     <ul>
-                        <li>Use <strong>exatamente</strong> os cabeçalhos do arquivo modelo.</li>
-                        <li><code>tipo</code>: Escreva <code>multipla_escolha</code>, <code>verdadeiro_falso</code> ou
-                            <code>discursiva</code>.</li>
-                        <li><code>opcao_a</code> a <code>opcao_d</code>: Deixe em branco para perguntas discursivas e de
-                            v/f.</li>
-                        <li><code>resposta_correta</code>: Use <code>a</code>, <code>b</code>, <code>c</code>,
-                            <code>d</code> ou <code>v</code>/<code>f</code>. Deixe em branco para discursivas.</li>
-                        <li><code>data_liberacao</code>: Use o formato <strong>DIA/MÊS/ANO</strong> (ex:
-                            <code>25/12/2025</code>).</li>
-                        <li><code>tempo_limite</code>: Informe em segundos. Deixe em branco para discursivas.</li>
-                        <li><code>explicacao</code>: Texto livre com a explicação.</li>
-                        <li><code>setor</code>: O nome do setor. Para múltiplos setores, separe por vírgula (ex: Vendas,
-                            Suporte). Para todos, escreva Todos ou deixe em branco.</li>
+                        <li><code>tipo</code>: multipla_escolha, verdadeiro_falso ou discursiva.</li>
+                        <li><code>resposta_correta</code>: a, b, c, d ou v/f.</li>
+                        <li><code>data_liberacao</code>: DD/MM/AAAA.</li>
+                        <li><code>explicacao</code>: Texto opcional.</li>
+                        <li><code>setor</code>: Nome do setor ou "Todos".</li>
                     </ul>
                 </div>
                 <form action="{{ url_for('upload_planilha') }}" method="post" enctype="multipart/form-data">
@@ -191,34 +156,37 @@
                     <button type="submit" class="btn" style="margin-top: 10px;">Importar Planilha</button>
                 </form>
             </div>
+            
             <hr>
-            <form action="{{ url_for('adicionar_pergunta') }}" method="post" enctype="multipart/form-data"
-                style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+            
+            <form action="{{ url_for('adicionar_pergunta') }}" method="post" enctype="multipart/form-data" style="text-align: left; max-width: 600px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
                 <h3>Cadastrar Nova Pergunta</h3>
+                
                 <label for="tipo">Tipo de Pergunta:</label><br>
                 <select id="tipo-pergunta" name="tipo" required onchange="toggleQuestionFields()">
                     <option value="multipla_escolha" selected>Múltipla Escolha</option>
                     <option value="verdadeiro_falso">Verdadeiro ou Falso</option>
                     <option value="discursiva">Discursiva</option>
                 </select><br><br>
+
                 <label for="texto">Texto da Pergunta:</label><br>
                 <textarea name="texto" rows="3" style="width: 100%;" required></textarea><br><br>
+
                 <label for="imagem_pergunta">Imagens de Exemplo (Opcional - Pode selecionar várias):</label><br>
                 <input type="file" name="imagem_pergunta" accept="image/*" multiple><br><br>
+
                 <div id="setores-alvo">
                     <label>Setores Alvo:</label>
                     <div style="background-color: #e9ecef; padding: 15px; border-radius: 8px;">
                         <div>
-                            <input type="checkbox" id="para_todos" name="para_todos_setores" value="sim"
-                                onchange="toggleAllSectors(this.checked)">
+                            <input type="checkbox" id="para_todos" name="para_todos_setores" value="sim" onchange="toggleAllSectors(this.checked)">
                             <label for="para_todos" style="font-weight: bold;">Para Todos os Setores</label>
                         </div>
                         <hr>
                         <div id="lista-setores-checkboxes" style="max-height: 150px; overflow-y: auto;">
                             {% for depto in departamentos %}
                             <div>
-                                <input type="checkbox" name="departamentos" value="{{ depto.id }}"
-                                    id="depto-{{ depto.id }}">
+                                <input type="checkbox" name="departamentos" value="{{ depto.id }}" id="depto-{{ depto.id }}">
                                 <label for="depto-{{ depto.id }}">{{ depto.nome }}</label>
                             </div>
                             {% endfor %}
@@ -226,6 +194,7 @@
                     </div>
                 </div>
                 <br>
+
                 <div id="campos-objetivos">
                     <div id="campos-multipla-escolha">
                         <label for="opcao_a">Opção A:</label><br>
@@ -239,32 +208,29 @@
                     </div>
                     <label for="resposta_correta">Resposta Correta:</label><br>
                     <select id="resposta-multipla-escolha" name="resposta_correta">
-                        <option value="a">A</option>
-                        <option value="b">B</option>
-                        <option value="c">C</option>
-                        <option value="d">D</option>
+                        <option value="a">A</option><option value="b">B</option><option value="c">C</option><option value="d">D</option>
                     </select>
                     <select id="resposta-vf" name="resposta_correta_vf" style="display: none;">
-                        <option value="v">Verdadeiro</option>
-                        <option value="f">Falso</option>
+                        <option value="v">Verdadeiro</option><option value="f">Falso</option>
                     </select><br><br>
                     <label for="tempo_limite">Tempo em Segundos:</label><br>
                     <input type="number" name="tempo_limite" value="30" min="5" style="width: 100px;"><br><br>
                 </div>
+
                 <label for="data_liberacao">Data de Liberação:</label><br>
                 <input type="date" name="data_liberacao" required><br><br>
-                <label for="explicacao">Explicação da Resposta (Opcional - aparece após o usuário
-                    responder):</label><br>
-                <textarea name="explicacao" rows="3" style="width: 100%;"
-                    placeholder="Ex: A resposta é B porque o processo X funciona assim..."></textarea><br><br>
+
+                <label for="explicacao">Explicação da Resposta (Opcional - aparece após o usuário responder):</label><br>
+                <textarea name="explicacao" rows="3" style="width: 100%;" placeholder="Ex: A resposta é B porque..."></textarea><br><br>
+
                 <button type="submit" class="btn">Salvar Pergunta</button>
             </form>
+
             <div class="ranking-container" style="max-width: 900px; margin: 40px auto;">
                 <h3>Perguntas Cadastradas</h3>
-                <div
-                    style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6; text-align: left;">
-                    <form method="get" action="{{ url_for('pagina_admin') }}"
-                        style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+                
+                <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6; text-align: left;">
+                    <form method="get" action="{{ url_for('pagina_admin') }}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <div style="flex: 1 1 150px;">
                             <label for="filtro_mes" style="font-weight: bold;">Mês/Ano:</label>
                             <input type="month" name="filtro_mes" value="{{ filtros.mes or '' }}" style="width: 100%;">
@@ -274,9 +240,7 @@
                             <select name="filtro_setor" style="width: 100%;">
                                 <option value="">-- Todos --</option>
                                 {% for depto in departamentos %}
-                                <option value="{{ depto.id }}" {% if depto.id==filtros.setor_id %}selected{% endif %}>
-                                    {{ depto.nome }}
-                                </option>
+                                <option value="{{ depto.id }}" {% if depto.id == filtros.setor_id %}selected{% endif %}>{{ depto.nome }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -284,21 +248,18 @@
                             <label for="filtro_tipo" style="font-weight: bold;">Tipo:</label>
                             <select name="filtro_tipo" style="width: 100%;">
                                 <option value="">-- Todos --</option>
-                                <option value="multipla_escolha" {% if 'multipla_escolha'==filtros.tipo %}selected{%
-                                    endif %}>Múltipla Escolha</option>
-                                <option value="verdadeiro_falso" {% if 'verdadeiro_falso'==filtros.tipo %}selected{%
-                                    endif %}>Verdadeiro ou Falso</option>
-                                <option value="discursiva" {% if 'discursiva'==filtros.tipo %}selected{% endif %}>
-                                    Discursiva</option>
+                                <option value="multipla_escolha" {% if 'multipla_escolha'==filtros.tipo %}selected{% endif %}>Múltipla Escolha</option>
+                                <option value="verdadeiro_falso" {% if 'verdadeiro_falso'==filtros.tipo %}selected{% endif %}>Verdadeiro ou Falso</option>
+                                <option value="discursiva" {% if 'discursiva'==filtros.tipo %}selected{% endif %}>Discursiva</option>
                             </select>
                         </div>
                         <div style="align-self: flex-end;">
                             <button type="submit" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar</button>
-                            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary"
-                                style="padding: 10px 15px; margin: 0;">Limpar</a>
+                            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
                         </div>
                     </form>
                 </div>
+
                 <table>
                     <thead>
                         <tr>
@@ -311,20 +272,17 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for pergunta in perguntas %}
+                        {% for pergunta in perguntas.items %}
                         <tr>
                             <td>{{ pergunta.data_liberacao.strftime('%d/%m/%Y') }}</td>
-
                             <td style="white-space: normal; max-width: 300px;">{{ pergunta.texto }}</td>
-
                             <td style="white-space: normal; max-width: 250px; font-size: 0.9em; color: #555;">
                                 {% if pergunta.explicacao %}
-                                {{ pergunta.explicacao }}
+                                    {{ pergunta.explicacao }}
                                 {% else %}
-                                <span style="color: #ccc;">-</span>
+                                    <span style="color: #ccc;">-</span>
                                 {% endif %}
                             </td>
-
                             <td>
                                 {% if pergunta.para_todos_setores %}
                                 <span style="color: #6c757d;">(Todos)</span>
@@ -340,57 +298,68 @@
                                 {% endif %}
                             </td>
                             <td style="display: flex; gap: 5px;">
-                                <a href="{{ url_for('editar_pergunta', pergunta_id=pergunta.id) }}"
-                                    style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
-                                <form action="{{ url_for('excluir_pergunta', pergunta_id=pergunta.id) }}" method="post"
-                                    onsubmit="return confirm('Tem certeza?');">
-                                    <button type="submit"
-                                        style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                <a href="{{ url_for('editar_pergunta', pergunta_id=pergunta.id) }}" style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
+                                <form action="{{ url_for('excluir_pergunta', pergunta_id=pergunta.id) }}" method="post" onsubmit="return confirm('Tem certeza?');">
+                                    <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
                                 </form>
                             </td>
                         </tr>
                         {% else %}
-                        <tr>
-                            <td colspan="6">Nenhuma pergunta encontrada com os filtros selecionados.</td>
-                        </tr>
+                        <tr><td colspan="6">Nenhuma pergunta encontrada.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
+
+                <div style="margin-top: 20px; display: flex; justify-content: center; gap: 10px;">
+                    {% if perguntas.has_prev %}
+                        <a href="{{ url_for('pagina_admin', page=perguntas.prev_num, **filtros) }}" class="btn btn-secondary" style="padding: 5px 15px; font-size: 14px;">&laquo; Anterior</a>
+                    {% endif %}
+
+                    <span style="align-self: center; font-weight: bold;">
+                        Página {{ perguntas.page }} de {{ perguntas.pages }}
+                    </span>
+
+                    {% if perguntas.has_next %}
+                        <a href="{{ url_for('pagina_admin', page=perguntas.next_num, **filtros) }}" class="btn btn-secondary" style="padding: 5px 15px; font-size: 14px;">Próximo &raquo;</a>
+                    {% endif %}
+                </div>
+
             </div>
         </div>
     </div>
-
     {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
-    {{ super() }} <script>
+    {{ super() }} 
+    <script>
     function toggleQuestionFields() {
         const tipo = document.getElementById('tipo-pergunta').value;
         const camposObjetivos = document.getElementById('campos-objetivos');
         const camposMultipla = document.getElementById('campos-multipla-escolha');
         const respostaMultipla = document.getElementById('resposta-multipla-escolha');
         const respostaVf = document.getElementById('resposta-vf');
-        if (tipo === 'discursiva') {
-            camposObjetivos.style.display = 'none';
-        } else {
+        
+        camposObjetivos.style.display = 'none';
+        camposMultipla.style.display = 'none';
+        respostaMultipla.style.display = 'none';
+        respostaVf.style.display = 'none';
+        
+        if (tipo === 'multipla_escolha') {
             camposObjetivos.style.display = 'block';
-            if (tipo === 'multipla_escolha') {
-                camposMultipla.style.display = 'block';
-                respostaMultipla.style.display = 'block';
-                respostaMultipla.name = 'resposta_correta';
-                respostaVf.style.display = 'none';
-                respostaVf.name = '';
-            } else { // verdadeiro_falso
-                camposMultipla.style.display = 'none';
-                respostaVf.style.display = 'block';
-                respostaVf.name = 'resposta_correta';
-                respostaMultipla.style.display = 'none';
-                respostaMultipla.name = '';
-            }
+            camposMultipla.style.display = 'block';
+            respostaMultipla.style.display = 'block';
+            respostaMultipla.name = 'resposta_correta';
+            respostaVf.name = '';
+        } else if (tipo === 'verdadeiro_falso') {
+            camposObjetivos.style.display = 'block';
+            respostaVf.style.display = 'block';
+            respostaVf.name = 'resposta_correta';
+            respostaMultipla.name = '';
         }
     }
+    
     function toggleAllSectors(isChecked) {
         const checkboxes = document.querySelectorAll('#lista-setores-checkboxes input[type="checkbox"]');
         checkboxes.forEach(cb => {
@@ -400,6 +369,7 @@
             }
         });
     }
+
     document.addEventListener('DOMContentLoaded', function() {
         toggleQuestionFields();
         const paraTodosCheckbox = document.getElementById('para_todos');
@@ -408,6 +378,7 @@
         }
     });
     </script>
+    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const accordions = document.querySelectorAll(".accordion-trigger");
@@ -441,37 +412,20 @@
             });
         });
     </script>
+    
     <script>
-    // Pega o formulário de cadastro de pergunta
-    const formCadastroPergunta = document.querySelector('form[action="{{ url_for('adicionar_pergunta') }}"]'); // Ajuste 'adicionar_pergunta' se o nome da sua rota for outro
-
+    const formCadastroPergunta = document.querySelector('form[action="{{ url_for('adicionar_pergunta') }}"]');
     if (formCadastroPergunta) {
         formCadastroPergunta.addEventListener('submit', function(event) {
-            // Verifica o estado do checkbox "Para Todos"
             const paraTodosCheckbox = document.getElementById('para_todos');
             const isParaTodosChecked = paraTodosCheckbox ? paraTodosCheckbox.checked : false;
-
-            // Pega todos os checkboxes de setores individuais que estão marcados
             const setoresChecados = document.querySelectorAll('input[name="departamentos"]:checked');
 
-            // Se "Para Todos" NÃO está marcado E NENHUM setor individual está marcado...
             if (!isParaTodosChecked && setoresChecados.length === 0) {
-                // Mostra um alerta para o usuário
                 alert('Por favor, selecione pelo menos um setor ou marque a opção "Para Todos os Setores".');
-                
-                // Impede o envio do formulário
                 event.preventDefault();
             }
         });
     }
-
-    // Sua função toggleAllSectors que você já deve ter
-    function toggleAllSectors(isTodosChecked) {
-        const checkboxes = document.querySelectorAll('#lista-setores-checkboxes input[type="checkbox"]');
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = isTodosChecked;
-            checkbox.disabled = isTodosChecked;
-        });
-    }
-</script>
+    </script>
 {% endblock %}
