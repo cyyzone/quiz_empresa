@@ -347,6 +347,84 @@ def responder_atividade(pergunta_id):
     # Se a requisição for GET, apenas mostra a página.
     return render_template('atividade_responder.html', pergunta=pergunta)
 
+@app.route('/responder', methods=['POST'])
+def processa_resposta():
+    if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
+    
+    pergunta_id = request.form['pergunta_id']
+    resposta_usuario = request.form.get('resposta', '')
+    
+    # Verifica se o tempo esgotou (resposta vinda do JS)
+    if resposta_usuario == 'esgotado':
+        flash('Tempo esgotado! Sem pontos desta vez.', 'danger')
+        pontos = 0
+    else:
+        pergunta = Pergunta.query.get(pergunta_id)
+        pontos = 0
+        if pergunta.resposta_correta == resposta_usuario:
+            tempo_restante = float(request.form['tempo_restante'])
+            pontos = 100 + int(tempo_restante * 5)
+            flash(f'Resposta correta! Você ganhou {pontos} pontos.', 'success')
+        else:
+            flash('Resposta incorreta. Sem pontos desta vez.', 'danger')
+    
+    nova_resposta = Resposta(
+        pontos=pontos, 
+        usuario_id=session['usuario_id'], 
+        pergunta_id=pergunta_id, 
+        resposta_dada=resposta_usuario, 
+        status_correcao='correto' if pontos > 0 else 'incorreto'
+    )
+    db.session.add(nova_resposta)
+    db.session.commit()
+    return redirect(url_for('pagina_quiz'))
+
+
+@app.route('/minhas-respostas')
+def minhas_respostas():
+    if 'usuario_id' not in session: 
+        return redirect(url_for('pagina_login'))
+
+    usuario_id = session['usuario_id']
+
+    # --- Lógica: Marcar feedbacks como vistos ---
+    feedbacks_nao_vistos = Resposta.query.join(Pergunta).filter(
+        Resposta.usuario_id == usuario_id,
+        Pergunta.tipo == 'discursiva',
+        Resposta.status_correcao.in_(['correto', 'incorreto', 'parcialmente_correto']),
+        Resposta.feedback_visto == False
+    ).all()
+
+    if feedbacks_nao_vistos:
+        for resposta in feedbacks_nao_vistos:
+            resposta.feedback_visto = True
+        db.session.commit()
+    
+    # Filtros
+    filtro_tipo = request.args.get('filtro_tipo', '')
+    filtro_resultado = request.args.get('filtro_resultado', '')
+
+    query = Resposta.query.filter_by(usuario_id=usuario_id)
+
+    if filtro_tipo:
+        query = query.join(Pergunta).filter(Pergunta.tipo == filtro_tipo)
+
+    if filtro_resultado == 'corretas':
+        query = query.filter(or_(Resposta.pontos > 0, Resposta.status_correcao == 'correto'))
+    elif filtro_resultado == 'parcialmente_corretas':
+        query = query.filter(Resposta.status_correcao == 'parcialmente_correto')
+    elif filtro_resultado == 'incorretas':
+        query = query.filter(or_(Resposta.pontos == 0, Resposta.status_correcao == 'incorreto'))
+    elif filtro_resultado == 'pendentes':
+        query = query.filter(Resposta.status_correcao == 'pendente')
+    
+    respostas_usuario = query.order_by(Resposta.data_resposta.desc()).all()
+
+    return render_template('minhas_respostas.html', 
+                           respostas=respostas_usuario,
+                           filtro_tipo=filtro_tipo,
+                           filtro_resultado=filtro_resultado)
+
 
 @app.route('/admin/relatorios/exportar_detalhado')
 def exportar_respostas_detalhado():
