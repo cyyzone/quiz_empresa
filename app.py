@@ -1152,6 +1152,7 @@ def processar_edicao_csv():
         return redirect(url_for('pagina_admin'))
 
     # 1. Reconstrói os dados da planilha a partir do formulário editado
+    # Isso funciona automaticamente para QUALQUER coluna que estiver na planilha (incluindo 'setor' e 'explicacao')
     rows_data = defaultdict(dict)
     for key, value in request.form.items():
         if key.startswith('row-'):
@@ -1163,45 +1164,67 @@ def processar_edicao_csv():
     success_count = 0
     error_count = 0
     
-    # 2. Loop através das linhas corrigidas para salvar no banco
+    # 2. Loop através das linhas para salvar no banco
     for row_index in sorted(rows_data.keys()):
         row = rows_data[row_index]
-        is_valid, errors = validar_linha(row) # Revalida a linha
+        is_valid, errors = validar_linha(row) 
         
         if is_valid:
             try:
                 data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
+                
+                # --- CRIAÇÃO DA PERGUNTA ---
                 nova_pergunta = Pergunta(
-                    tipo=row['tipo'], texto=row['texto'],
-                    opcao_a=row.get('opcao_a') or None, opcao_b=row.get('opcao_b') or None,
-                    opcao_c=row.get('opcao_c') or None, opcao_d=row.get('opcao_d') or None,
+                    tipo=row['tipo'], 
+                    texto=row['texto'],
+                    # AQUI: Pega a explicação da planilha
+                    explicacao=row.get('explicacao'), 
+                    opcao_a=row.get('opcao_a') or None, 
+                    opcao_b=row.get('opcao_b') or None,
+                    opcao_c=row.get('opcao_c') or None, 
+                    opcao_d=row.get('opcao_d') or None,
                     resposta_correta=row.get('resposta_correta') or None, 
                     data_liberacao=data_obj,
                     tempo_limite=int(float(row['tempo_limite'])) if row.get('tempo_limite') else None
                 )
-                db.session.add(nova_pergunta)
+
+                # --- LÓGICA DE SETORES (IMPORTAÇÃO) ---
+                campo_setor = row.get('setor', '').strip()
                 
+                # Se estiver vazio ou escrito "Todos", marca para todos
+                if not campo_setor or campo_setor.lower() == 'todos':
+                    nova_pergunta.para_todos_setores = True
+                else:
+                    nova_pergunta.para_todos_setores = False
+                    # Separa por vírgula se houver mais de um setor (ex: "Vendas, Suporte")
+                    nomes_setores = [s.strip() for s in campo_setor.split(',') if s.strip()]
+                    
+                    # Busca os departamentos no banco de dados pelos nomes
+                    if nomes_setores:
+                        deptos_encontrados = Departamento.query.filter(Departamento.nome.in_(nomes_setores)).all()
+                        nova_pergunta.departamentos = deptos_encontrados
+                
+                db.session.add(nova_pergunta)
                 db.session.commit()
                 
                 success_count += 1
             except Exception as e:
-                # Se ocorrer um erro ao salvar esta linha específica, é desfeito a tentativa (rollback)
-                # e continuamos para a próxima, sem quebrar toda a importação.
                 db.session.rollback()
                 error_count += 1
-                app.logger.error(f"Erro ao salvar linha {row_index} (após correção): {e} | Dados: {row}")
+                app.logger.error(f"Erro ao salvar linha {row_index}: {e} | Dados: {row}")
         else:
             error_count += 1
-            app.logger.error(f"Linha {row_index} ainda inválida após edição: {errors}")
+            app.logger.error(f"Linha {row_index} inválida: {errors}")
 
+    # Limpa a sessão
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
     session.pop('csv_headers', None)
     
     if error_count > 0:
-        flash(f'Importação parcial: {success_count} perguntas salvas. {error_count} linhas continham erros e foram ignoradas.', 'warning')
+        flash(f'Importação parcial: {success_count} perguntas salvas. {error_count} linhas ignoradas (erros ou setores não encontrados).', 'warning')
     else:
-        flash(f'Importação concluída! {success_count} perguntas foram importadas com sucesso!', 'success')
+        flash(f'Importação concluída! {success_count} perguntas importadas com sucesso!', 'success')
         
     return redirect(url_for('pagina_admin'))
 
