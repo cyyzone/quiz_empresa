@@ -87,6 +87,22 @@ class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pe
     feedback_admin = db.Column(db.Text, nullable=True) # O feedback escrito pelo admin após corrigir uma pergunta discursiva. Pode ser nulo se ainda não foi corrigido.
     feedback_visto = db.Column(db.Boolean, default=False, nullable=False) # Um campo booleano para marcar se o usuário já viu o feedback do admin. O padrão é False (não visto).
 
+# --- NOVOS MODELOS PARA MÚLTIPLOS ARQUIVOS ---
+
+class ImagemPergunta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(300), nullable=False)
+    pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False)
+    # Cria a relação para podermos usar: pergunta.imagens_extra
+    pergunta = db.relationship('Pergunta', backref=db.backref('imagens_extra', lazy=True))
+
+class AnexoResposta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(300), nullable=False)
+    resposta_id = db.Column(db.Integer, db.ForeignKey('resposta.id'), nullable=False)
+    # Cria a relação para podermos usar: resposta.anexos_extra
+    resposta = db.relationship('Resposta', backref=db.backref('anexos_extra', lazy=True))
+
 # --- FUNÇÕES AUXILIARES ---
 # Criei esta seção para agrupar pequenas funções que são reutilizadas em várias partes do meu projeto.
 
@@ -289,30 +305,40 @@ def responder_atividade(pergunta_id):
     if request.method == 'POST':
         texto_resposta = request.form['texto_discursivo']
         
-        # ====================================================================
-        # A LÓGICA PARA PROCESSAR O ANEXO ESTÁ AQUI
-        # ====================================================================
-        anexo_url = None # 1. Começa sem anexo por padrão.
-        
-        if 'anexo_resposta' in request.files: # 2. Verifica se um arquivo foi enviado.
-            file = request.files['anexo_resposta']
-            if file and file.filename != '' and allowed_file(file.filename):
-                # 3. Envia o arquivo para o Cloudinary de forma segura.
-                #    'resource_type="auto"' permite enviar PDFs, Docs, etc., além de imagens.
-                upload_result = cloudinary.uploader.upload(file, resource_type="auto")
-                # 4. Pega a URL segura que o Cloudinary devolveu.
-                anexo_url = upload_result.get('secure_url')
-        # ====================================================================
-
-        # 5. Salva a resposta no banco de dados com o link do anexo (ou None se não houver).
+        # 1. Cria e salva a resposta PRIMEIRO para gerar o ID
+        # Precisamos do ID da resposta para vincular os anexos na tabela auxiliar
         nova_resposta = Resposta(
             usuario_id=session['usuario_id'],
             pergunta_id=pergunta.id,
             texto_discursivo=texto_resposta,
-            anexo_resposta=anexo_url, # <-- A URL é salva aqui
             status_correcao='pendente'
         )
         db.session.add(nova_resposta)
+        db.session.commit()
+
+        # ====================================================================
+        # NOVA LÓGICA PARA MÚLTIPLOS ANEXOS
+        # ====================================================================
+        
+        # Pega a LISTA de arquivos enviados (note o .getlist)
+        arquivos = request.files.getlist('anexo_resposta')
+        
+        for file in arquivos:
+            if file and file.filename != '' and allowed_file(file.filename):
+                # Envia o arquivo para o Cloudinary
+                upload_result = cloudinary.uploader.upload(file, resource_type="auto")
+                anexo_url = upload_result.get('secure_url')
+                
+                # A) Compatibilidade: Se for o primeiro anexo, salva no campo antigo também
+                # Isso garante que o sistema antigo continue mostrando pelo menos um anexo
+                if not nova_resposta.anexo_resposta:
+                    nova_resposta.anexo_resposta = anexo_url
+                
+                # B) Nova Tabela: Salva na tabela auxiliar de anexos
+                novo_anexo = AnexoResposta(url=anexo_url, resposta=nova_resposta)
+                db.session.add(novo_anexo)
+        
+        # Salva os anexos no banco
         db.session.commit()
         
         flash('Sua resposta foi enviada para avaliação!', 'success')
@@ -320,83 +346,6 @@ def responder_atividade(pergunta_id):
 
     # Se a requisição for GET, apenas mostra a página.
     return render_template('atividade_responder.html', pergunta=pergunta)
-
-@app.route('/responder', methods=['POST'])
-def processa_resposta():
-    if 'usuario_id' not in session: return redirect(url_for('pagina_login'))
-    pergunta_id = request.form['pergunta_id']
-    resposta_usuario = request.form.get('resposta', '')
-    pergunta = Pergunta.query.get(pergunta_id)
-    pontos = 0
-    if pergunta.resposta_correta == resposta_usuario:
-        tempo_restante = float(request.form['tempo_restante'])
-        pontos = 100 + int(tempo_restante * 5)
-        flash(f'Resposta correta! Você ganhou {pontos} pontos.', 'success')
-    else:
-        flash('Resposta incorreta. Sem pontos desta vez.', 'danger')
-    nova_resposta = Resposta(
-        pontos=pontos, 
-        usuario_id=session['usuario_id'], 
-        pergunta_id=pergunta_id, 
-        resposta_dada=resposta_usuario, 
-        status_correcao='correto' if pontos > 0 else 'incorreto'
-    )
-    db.session.add(nova_resposta)
-    db.session.commit()
-    return redirect(url_for('pagina_quiz'))
-
-
-@app.route('/minhas-respostas')
-def minhas_respostas():
-    if 'usuario_id' not in session: 
-        return redirect(url_for('pagina_login'))
-
-    usuario_id = session['usuario_id']
-
-    # --- INÍCIO DA NOVA LÓGICA: Marcar feedbacks como vistos ---
-    # Esta ação acontece toda vez que o usuário visita a página, "limpando" os avisos.
-    feedbacks_nao_vistos = Resposta.query.join(Pergunta).filter(
-        Resposta.usuario_id == usuario_id,
-        Pergunta.tipo == 'discursiva',
-        Resposta.status_correcao.in_(['correto', 'incorreto']),
-        Resposta.feedback_visto == False
-    ).all()
-
-    if feedbacks_nao_vistos:
-        for resposta in feedbacks_nao_vistos:
-            resposta.feedback_visto = True
-        db.session.commit()
-    # --- FIM DA NOVA LÓGICA ---
-    
-    # Pega os valores dos filtros da URL (se existirem)
-    filtro_tipo = request.args.get('filtro_tipo', '')
-    filtro_resultado = request.args.get('filtro_resultado', '')
-
-    # Começa a busca base, pegando apenas as respostas do usuário logado
-    query = Resposta.query.filter_by(usuario_id=usuario_id)
-
-    # Aplica o filtro de TIPO DE PERGUNTA, se selecionado
-    if filtro_tipo:
-        query = query.join(Pergunta).filter(Pergunta.tipo == filtro_tipo)
-
-    # Aplica o filtro de RESULTADO, se selecionado
-    if filtro_resultado == 'corretas':
-        # Uma resposta é correta se os pontos forem > 0 (objetivas) OU o status for 'correto' (discursivas)
-        query = query.filter(or_(Resposta.pontos > 0, Resposta.status_correcao == 'correto'))
-    elif filtro_resultado == 'incorretas':
-        # É incorreta se os pontos forem 0 (objetivas) OU o status for 'incorreto' (discursivas)
-        query = query.filter(or_(Resposta.pontos == 0, Resposta.status_correcao == 'incorreto'))
-    elif filtro_resultado == 'pendentes':
-        # Apenas para discursivas aguardando avaliação
-        query = query.filter(Resposta.status_correcao == 'pendente')
-    
-    # Executa a busca final com os filtros e ordena pelas mais recentes
-    respostas_usuario = query.order_by(Resposta.data_resposta.desc()).all()
-
-    return render_template('minhas_respostas.html', 
-                           respostas=respostas_usuario,
-                           filtro_tipo=filtro_tipo,
-                           filtro_resultado=filtro_resultado)
 
 
 @app.route('/admin/relatorios/exportar_detalhado')
@@ -690,30 +639,56 @@ def excluir_usuario(usuario_id):
     flash(f'Usuário "{usuario.nome}" e todas as suas respostas foram excluídos.', 'success')
     return redirect(url_for('pagina_admin'))
 
+@app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET'])
+def editar_pergunta(pergunta_id):
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    pergunta = Pergunta.query.get_or_404(pergunta_id)
+    todos_departamentos = Departamento.query.order_by(Departamento.nome).all()
+    return render_template('edit_question.html', pergunta=pergunta, todos_departamentos=todos_departamentos)
+
 @app.route('/admin/add_question', methods=['POST'])
 def adicionar_pergunta():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
     
     tipo = request.form.get('tipo')
     data_str = request.form.get('data_liberacao')
-    data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+    
+    try:
+        data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('pagina_admin'))
 
+    # 1. Cria o objeto da pergunta com os dados básicos
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form.get('texto'),
         data_liberacao=data_obj
     )
 
-    if 'imagem_pergunta' in request.files:
-        file = request.files['imagem_pergunta']
-        if file and file.filename != '' and allowed_file(file.filename):
-            # Envia o arquivo para a nuvem do Cloudinary
-            upload_result = cloudinary.uploader.upload(file, folder="perguntas")
-            # Pega a URL segura que o Cloudinary devolveu
-            imagem_url = upload_result.get('secure_url')
-            # Salva essa URL no banco de dados
-            nova_pergunta.imagem_pergunta = imagem_url
+    # 2. Salvamos IMEDIATAMENTE para gerar o ID da pergunta (necessário para as imagens)
+    db.session.add(nova_pergunta)
+    db.session.commit()
 
+    # 3. Processamento de Múltiplas Imagens
+    # 'getlist' pega todos os arquivos enviados no input com multiple
+    arquivos = request.files.getlist('imagem_pergunta') 
+    
+    for file in arquivos:
+        if file and file.filename != '' and allowed_file(file.filename):
+            # Envia para o Cloudinary
+            upload_result = cloudinary.uploader.upload(file, folder="perguntas")
+            imagem_url = upload_result.get('secure_url')
+            
+            # A) Compatibilidade: Se for a primeira imagem, salva no campo antigo também
+            if not nova_pergunta.imagem_pergunta:
+                nova_pergunta.imagem_pergunta = imagem_url
+            
+            # B) Nova Lógica: Salva na tabela de imagens extras vinculada a esta pergunta
+            nova_imagem_banco = ImagemPergunta(url=imagem_url, pergunta=nova_pergunta)
+            db.session.add(nova_imagem_banco)
+
+    # 4. Configuração dos Setores (Atualiza a pergunta já criada)
     if 'para_todos_setores' in request.form:
         nova_pergunta.para_todos_setores = True
     else:
@@ -723,29 +698,30 @@ def adicionar_pergunta():
             departamentos_selecionados = Departamento.query.filter(Departamento.id.in_(departamento_ids)).all()
             nova_pergunta.departamentos = departamentos_selecionados
     
+    # 5. Configuração das Opções (Múltipla Escolha / V ou F)
     if tipo in ['multipla_escolha', 'verdadeiro_falso']:
         nova_pergunta.resposta_correta = request.form.get('resposta_correta')
         nova_pergunta.tempo_limite = request.form.get('tempo_limite')
+        
         if tipo == 'multipla_escolha':
-            nova_pergunta.opcao_a, nova_pergunta.opcao_b, nova_pergunta.opcao_c, nova_pergunta.opcao_d = request.form.get('opcao_a'), request.form.get('opcao_b'), request.form.get('opcao_c'), request.form.get('opcao_d')
-    else: # Discursiva ou V/F (opções são nulas)
-        nova_pergunta.tempo_limite, nova_pergunta.resposta_correta = None, None
-        if tipo == 'discursiva': # Garante que opções M/E fiquem nulas
-             nova_pergunta.opcao_a, nova_pergunta.opcao_b, nova_pergunta.opcao_c, nova_pergunta.opcao_d = None, None, None, None
+            nova_pergunta.opcao_a = request.form.get('opcao_a')
+            nova_pergunta.opcao_b = request.form.get('opcao_b')
+            nova_pergunta.opcao_c = request.form.get('opcao_c')
+            nova_pergunta.opcao_d = request.form.get('opcao_d')
+    else: 
+        # Discursiva (garante que campos desnecessários fiquem vazios)
+        nova_pergunta.tempo_limite = None
+        nova_pergunta.resposta_correta = None
+        nova_pergunta.opcao_a = None
+        nova_pergunta.opcao_b = None
+        nova_pergunta.opcao_c = None
+        nova_pergunta.opcao_d = None
 
-
-    db.session.add(nova_pergunta)
+    # 6. Salva todas as alterações finais (imagens, setores, opções)
     db.session.commit()
-    flash('Pergunta adicionada com sucesso!', 'success')
     
+    flash('Pergunta adicionada com sucesso!', 'success')
     return redirect(url_for('pagina_admin'))
-
-@app.route('/admin/edit_question/<int:pergunta_id>', methods=['GET'])
-def editar_pergunta(pergunta_id):
-    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
-    pergunta = Pergunta.query.get_or_404(pergunta_id)
-    todos_departamentos = Departamento.query.order_by(Departamento.nome).all()
-    return render_template('edit_question.html', pergunta=pergunta, todos_departamentos=todos_departamentos)
 
 @app.route('/admin/edit_question/<int:pergunta_id>', methods=['POST'])
 def atualizar_pergunta(pergunta_id):
@@ -754,29 +730,35 @@ def atualizar_pergunta(pergunta_id):
     
     pergunta = Pergunta.query.get_or_404(pergunta_id)
     
-    # Atualiza os campos básicos
+    # 1. Atualiza os campos básicos
     pergunta.tipo = request.form.get('tipo')
     pergunta.texto = request.form.get('texto')
-    pergunta.data_liberacao = datetime.strptime(request.form.get('data_liberacao'), '%Y-%m-%d').date()
+    
+    try:
+        pergunta.data_liberacao = datetime.strptime(request.form.get('data_liberacao'), '%Y-%m-%d').date()
+    except ValueError:
+        flash('Data inválida.', 'danger')
+        return redirect(url_for('editar_pergunta', pergunta_id=pergunta_id))
 
-    # Lógica para atualizar a imagem da pergunta
-    if 'imagem_pergunta' in request.files:
-        file = request.files['imagem_pergunta']
+    # 2. Nova Lógica: Upload de Múltiplas Imagens (Adiciona à galeria)
+    # Pega todos os arquivos enviados
+    arquivos = request.files.getlist('imagem_pergunta')
+    
+    for file in arquivos:
         if file and file.filename != '' and allowed_file(file.filename):
-            # (Opcional, mas boa prática: apaga a imagem antiga do Cloudinary)
-            if pergunta.imagem_pergunta:
-                # Extrai o 'public_id' da URL antiga para poder deletar
-                public_id = pergunta.imagem_pergunta.split('/')[-1].split('.')[0]
-                cloudinary.uploader.destroy(public_id)
-
-            # Envia a NOVA imagem para o Cloudinary
+            # Envia para o Cloudinary
             upload_result = cloudinary.uploader.upload(file, folder="perguntas_quiz")
-            # Pega a URL segura que o Cloudinary devolveu
             imagem_url = upload_result.get('secure_url')
-            # Atualiza a URL da pergunta no banco de dados
-            pergunta.imagem_pergunta = imagem_url
+            
+            # Compatibilidade: Se a pergunta ainda não tem capa (campo antigo), usa a primeira nova
+            if not pergunta.imagem_pergunta:
+                pergunta.imagem_pergunta = imagem_url
+            
+            # Salva na nova tabela de galeria
+            nova_img = ImagemPergunta(url=imagem_url, pergunta=pergunta)
+            db.session.add(nova_img)
 
-    # Atualiza os departamentos associados
+    # 3. Atualiza os departamentos associados
     pergunta.departamentos.clear()
     if 'para_todos_setores' in request.form:
         pergunta.para_todos_setores = True
@@ -787,6 +769,7 @@ def atualizar_pergunta(pergunta_id):
             departamentos_selecionados = Departamento.query.filter(Departamento.id.in_(departamento_ids)).all()
             pergunta.departamentos = departamentos_selecionados
 
+    # 4. Atualiza as opções (conforme o tipo)
     if pergunta.tipo in ['multipla_escolha', 'verdadeiro_falso']:
         pergunta.resposta_correta = request.form.get('resposta_correta')
         pergunta.tempo_limite = request.form.get('tempo_limite')

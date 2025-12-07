@@ -81,14 +81,18 @@
             <p style="white-space: pre-wrap;">{{ resposta.texto_discursivo }}</p>
         </div>
 
-        {% if resposta.anexo_resposta %}
+        {% if resposta.anexos_extra %}
         <div style="margin-top: 15px;">
-            <strong>Anexo enviado:</strong>
-            <a href="{{ resposta.anexo_resposta }}" target="_blank" style="font-weight: bold;">
-                Ver Anexo
-            </a>
+            <strong>Anexos enviados:</strong><br>
+            {% for anexo in resposta.anexos_extra %}
+                <a href="{{ anexo.url }}" target="_blank" class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
+                    Ver Anexo {{ loop.index }}
+                </a>
+            {% endfor %}
         </div>
-        {% endif %}
+    {% elif resposta.anexo_resposta %}
+        <a href="{{ resposta.anexo_resposta }}" target="_blank">Ver Anexo Antigo</a>
+    {% endif %}
 
         {% if resposta.status_correcao == 'pendente' %}
         <form action="{{ url_for('corrigir_resposta', resposta_id=resposta.id) }}" method="post">
