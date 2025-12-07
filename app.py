@@ -66,6 +66,7 @@ class Pergunta(db.Model):  # Crio a tabela principal, que armazena todas as perg
     opcao_c = db.Column(db.Text, nullable=True)
     opcao_d = db.Column(db.Text, nullable=True)
     resposta_correta = db.Column(db.String(1), nullable=True) # A resposta correta ('a', 'b', 'v', etc.). Pode ser nula para perguntas discursivas.
+    explicacao = db.Column(db.Text, nullable=True) # Explicação que aparece após responder
     data_liberacao = db.Column(db.Date, nullable=False) # A data a partir da qual a pergunta fica disponível.
     tempo_limite = db.Column(db.Integer, nullable=True) # O tempo limite para responder (em segundos). Pode ser nulo para perguntas discursivas.
     imagem_pergunta = db.Column(db.String(300), nullable=True) # O link da imagem da pergunta (do Cloudinary).
@@ -356,20 +357,24 @@ def processa_resposta():
     pergunta_id = request.form['pergunta_id']
     resposta_usuario = request.form.get('resposta', '')
     
-    # Verifica se o tempo esgotou (resposta vinda do JS)
+    pergunta = Pergunta.query.get(pergunta_id)
+    pontos = 0
+    resultado = '' # 'correto', 'incorreto' ou 'esgotado'
+
+    # Verifica se o tempo esgotou
     if resposta_usuario == 'esgotado':
-        flash('Tempo esgotado! Sem pontos desta vez.', 'danger')
+        resultado = 'esgotado'
         pontos = 0
     else:
-        pergunta = Pergunta.query.get(pergunta_id)
-        pontos = 0
         if pergunta.resposta_correta == resposta_usuario:
             tempo_restante = float(request.form['tempo_restante'])
             pontos = 100 + int(tempo_restante * 5)
-            flash(f'Resposta correta! Você ganhou {pontos} pontos.', 'success')
+            resultado = 'correto'
         else:
-            flash('Resposta incorreta. Sem pontos desta vez.', 'danger')
+            resultado = 'incorreto'
+            pontos = 0
     
+    # Salva a resposta no banco
     nova_resposta = Resposta(
         pontos=pontos, 
         usuario_id=session['usuario_id'], 
@@ -379,8 +384,13 @@ def processa_resposta():
     )
     db.session.add(nova_resposta)
     db.session.commit()
-    return redirect(url_for('pagina_quiz'))
-
+    
+    # EM VEZ DE REDIRECIONAR, RENDERIZAMOS A TELA DE FEEDBACK
+    # Passamos as variáveis necessárias para o template feedback_quiz.html
+    return render_template('feedback_quiz.html', 
+                           resultado=resultado, 
+                           pontos=pontos, 
+                           pergunta=pergunta)
 
 @app.route('/minhas-respostas')
 def minhas_respostas():
@@ -743,6 +753,7 @@ def adicionar_pergunta():
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form.get('texto'),
+        explicacao=request.form.get('explicacao'),
         data_liberacao=data_obj
     )
 
@@ -813,6 +824,7 @@ def atualizar_pergunta(pergunta_id):
     # 1. Atualiza os campos básicos
     pergunta.tipo = request.form.get('tipo')
     pergunta.texto = request.form.get('texto')
+    pergunta.explicacao = request.form.get('explicacao')
     
     try:
         pergunta.data_liberacao = datetime.strptime(request.form.get('data_liberacao'), '%Y-%m-%d').date()

@@ -18,11 +18,25 @@
         <label for="texto">Texto da Pergunta:</label><br>
         <textarea name="texto" rows="3" style="width: 100%;" required>{{ pergunta.texto }}</textarea><br><br>
 
-        <label for="imagem_pergunta">Imagem de Exemplo (Opcional):</label><br>
+        <label for="imagem_pergunta">Imagens (Opcional - Pode selecionar várias):</label><br>
+        
         {% if pergunta.imagem_pergunta %}
-        <p style="font-size: 14px;">Imagem atual: {{ pergunta.imagem_pergunta }}. Envie uma nova para substituir.</p>
+            <div style="margin-bottom: 10px;">
+                <small>Capa Atual:</small><br>
+                <img src="{{ pergunta.imagem_pergunta }}" style="max-height: 100px; border-radius: 5px;">
+            </div>
         {% endif %}
-        <input type="file" name="imagem_pergunta" accept="image/*"><br><br>
+
+        {% if pergunta.imagens_extra %}
+            <div style="margin-bottom: 10px;">
+                <small>Galeria Atual:</small><br>
+                {% for img in pergunta.imagens_extra %}
+                    <img src="{{ img.url }}" style="max-height: 80px; margin-right: 5px; border-radius: 5px;">
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <input type="file" name="imagem_pergunta" accept="image/*" multiple><br><br>
 
         <div id="setores-alvo">
             <label>Setores Alvo:</label>
@@ -74,6 +88,9 @@
             <label for="tempo_limite">Tempo em Segundos:</label><br>
             <input type="number" name="tempo_limite" value="{{ pergunta.tempo_limite or '' }}" min="5" style="width: 100px;"><br><br>
         </div>
+
+        <label for="explicacao">Explicação (Aparece após responder):</label><br>
+        <textarea name="explicacao" rows="3" style="width: 100%;" placeholder="Opcional: Explique o motivo da resposta...">{{ pergunta.explicacao or '' }}</textarea><br><br>
 
         <label for="data_liberacao">Data de Liberação:</label><br>
         <input type="date" name="data_liberacao" value="{{ pergunta.data_liberacao.strftime('%Y-%m-%d') }}" required><br><br>

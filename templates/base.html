@@ -96,8 +96,7 @@
         {% if messages %}
         {% for category, message in messages %}
         <div class="alert alert-{{ category }}">
-            {{ message }}
-            <button class="close-alert-btn">&times;</button>
+            {{ message | safe }} <button class="close-alert-btn">&times;</button>
         </div>
         {% endfor %}
         {% endif %}

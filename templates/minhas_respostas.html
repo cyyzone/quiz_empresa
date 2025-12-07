@@ -65,9 +65,15 @@
                     <strong>Sua resposta:</strong> ({{ resposta.resposta_dada.upper() if resposta.resposta_dada else '' }}) {{ get_texto_da_opcao(resposta.pergunta, resposta.resposta_dada) }}
                 </p>
                 {% if resposta.pontos == 0 %}
-                    <p style="padding: 10px; border-radius: 5px; background-color: #d4edda;">
-                        <strong>Resposta correta:</strong> ({{ resposta.pergunta.resposta_correta.upper() }}) {{ get_texto_da_opcao(resposta.pergunta, resposta.pergunta.resposta_correta) }}
-                    </p>
+                <p style="padding: 10px; border-radius: 5px; background-color: #d4edda;">
+                    <strong>Resposta correta:</strong> ({{ resposta.pergunta.resposta_correta.upper() }}) ...
+                </p>
+                {% endif %}
+                
+                {% if resposta.pergunta.explicacao %}
+                <div style="margin-top: 10px; padding: 10px; background-color: #e2e6ea; border-radius: 5px; font-size: 0.95em;">
+                    <strong>💡 Explicação:</strong> {{ resposta.pergunta.explicacao }}
+                </div>
                 {% endif %}
             {% endif %}
         </div>
