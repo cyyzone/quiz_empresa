@@ -23,11 +23,18 @@
     {% endif %}
 
     {% if not senha_correta %}
-    <form method="post">
-        <p>Digite a senha de administrador para continuar:</p>
-        <input type="password" name="senha" autofocus autocomplete="new-password">
-        <button type="submit">Entrar</button>
-    </form>
+    <div class="login-container" style="max-width: 400px; margin: 50px auto;">
+        <h2>Login Administrativo</h2>
+        <form method="post">
+            <label>E-mail:</label>
+            <input type="email" name="email" required autofocus placeholder="admin@empresa.com">
+            
+            <label>Senha:</label>
+            <input type="password" name="senha" required autocomplete="current-password">
+            
+            <button type="submit" class="btn" style="width: 100%; margin: 20px 0 0 0;">Entrar</button>
+        </form>
+    </div>
     {% else %}
 
     <div style="margin-bottom: 20px;">
@@ -130,6 +137,66 @@
             </div>
         </div>
     </div>
+    <button class="accordion-trigger" id="accordion-admins">Gerenciar Administradores</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Novo Administrador</h3>
+                    <form action="{{ url_for('adicionar_admin') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label>Nome:</label>
+                        <input type="text" name="nome" required style="width: 100%;">
+                        <label>E-mail:</label>
+                        <input type="email" name="email" required style="width: 100%;">
+                        <label>Senha:</label>
+                        <input type="password" name="senha" required style="width: 100%;">
+                        <button type="submit" class="btn">Cadastrar Admin</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 400px;">
+                    <h3>Administradores</h3>
+                    <div class="ranking-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for admin in admins %}
+                                <tr>
+                                    <td>{{ admin.nome }}</td>
+                                    <td>{{ admin.email }}</td>
+                                    <td style="display: flex; gap: 5px;">
+                                        <a href="{{ url_for('editar_admin', admin_id=admin.id) }}"
+                                            style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">
+                                            Editar
+                                        </a>
+                
+                                        {% if admin.id != session['admin_id'] %}
+                                        <form action="{{ url_for('excluir_admin', admin_id=admin.id) }}" method="post"
+                                            onsubmit="return confirm('Tem certeza que deseja excluir o administrador {{ admin.nome }}?');"
+                                            style="margin: 0;">
+                                            <button type="submit"
+                                                style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                                                Excluir
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span style="color: #999; font-size: 12px; align-self: center; margin-left: 5px;">(Você)</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div>
+                </div>
+                </div>
 
     <button class="accordion-trigger" id="accordion-perguntas">Gerenciar Perguntas</button>
     <div class="accordion-panel">

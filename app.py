@@ -1,5 +1,7 @@
 # --- INÍCIO DAS IMPORTAÇÕES: Ferramentas que meu projeto precisa ---
 from flask import Flask, render_template, request, redirect, url_for, session, flash # Importo as ferramentas principais do Flask para criar as páginas,lidar com formulários, redirecionar usuários e gerenciar sessões. 
+from sqlalchemy.orm import joinedload
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy # Importo o SQLAlchemy para conectar e conversar com meu banco de dados usando Python.
 from sqlalchemy.sql import func, case # Importo funções específicas do SQLAlchemy para fazer cálculos (como somas e contagens), e criar lógicas condicionais (case) e de OU (or_) nas buscas ao banco.
 from sqlalchemy import and_, or_
@@ -56,6 +58,18 @@ class Usuario(db.Model): # Crio a tabela para guardar as informações dos colab
     codigo_acesso = db.Column(db.String(4), unique=True, nullable=False) # O código de 4 dígitos para login, não pode repetir.
     departamento_id = db.Column(db.Integer, db.ForeignKey('departamento.id'), nullable=False) # Crio a "chave estrangeira" que conecta cada usuário a um departamento. Isso garante que todo usuário pertença a um setor.
     respostas = db.relationship('Resposta', backref='usuario', lazy=True) # Crio a relação com a tabela de respostas. Isso me permite acessar `usuario.respostas` para ver todas as respostas que este usuário já deu. O `backref='usuario'` cria o atalho `resposta.usuario` para acessar o usuário a partir de uma resposta.
+
+class Administrador(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    senha_hash = db.Column(db.String(256), nullable=False)
+
+    def set_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def check_senha(self, senha):
+        return check_password_hash(self.senha_hash, senha)
 
 class Pergunta(db.Model):  # Crio a tabela principal, que armazena todas as perguntas do quiz.
     id = db.Column(db.Integer, primary_key=True) # A chave primária para cada pergunta.
@@ -307,39 +321,28 @@ def pagina_atividades():
     page = request.args.get('page', 1, type=int)
     per_page = 5 
 
-    # --- NOVA LÓGICA DE ORDENAÇÃO ---
-    # 1. db.session.query(Pergunta): Começamos buscando perguntas.
-    # 2. .outerjoin(...): Juntamos com a tabela de respostas, mas APENAS as respostas DESTE usuário.
-    #    (Isso permite saber quais perguntas ESSE usuário específico já respondeu).
-    query_atividades = db.session.query(Pergunta).outerjoin(
-        Resposta, 
-        and_(Resposta.pergunta_id == Pergunta.id, Resposta.usuario_id == usuario_id)
-    ).filter(
+    # 1. Cria uma lista com os IDs das perguntas que o usuário JÁ respondeu
+    ids_respondidas = [r.pergunta_id for r in Resposta.query.filter_by(usuario_id=usuario_id).all()]
+
+    # 2. Monta a consulta filtrando para mostrar APENAS as que NÃO estão na lista acima
+    query_atividades = Pergunta.query.filter(
         Pergunta.tipo == 'discursiva',
         Pergunta.data_liberacao <= hoje,
+        Pergunta.id.notin_(ids_respondidas), # <--- ESTA É A MUDANÇA: Exclui as respondidas
         or_(
             Pergunta.para_todos_setores == True,
             Pergunta.departamentos.any(Departamento.id == usuario.departamento_id)
         )
-    ).order_by(
-        # 3. AQUI ESTÁ O SEGREDO:
-        # Resposta.id.isnot(None) retorna True (1) se tiver resposta e False (0) se não tiver.
-        # Ordenando de forma crescente (padrão), o 0 (Não respondidas) vem antes do 1 (Respondidas).
-        Resposta.id.isnot(None),
-        
-        # Critério de desempate: Data de liberação (mais novas primeiro)
-        Pergunta.data_liberacao.desc()
-    )
+    ).order_by(Pergunta.data_liberacao.desc())
 
-    # Aplica a paginação na query modificada
+    # Aplica a paginação
     atividades_pagination = query_atividades.paginate(page=page, per_page=per_page, error_out=False)
 
-    # Busca as respostas para pintar o "✔️ Respondido" no HTML
-    respostas_dadas = {r.pergunta_id: r for r in Resposta.query.filter_by(usuario_id=usuario_id).all()}
-    
+    # Passamos um dicionário vazio para 'respostas_dadas', pois nenhuma atividade
+    # listada aqui terá resposta (então o botão sempre será "Responder")
     return render_template('atividades.html', 
                            atividades=atividades_pagination, 
-                           respostas_dadas=respostas_dadas)
+                           respostas_dadas={})
 
 @app.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
 def responder_atividade(pergunta_id):
@@ -459,9 +462,9 @@ def minhas_respostas():
     filtro_tipo = request.args.get('filtro_tipo', '')
     filtro_resultado = request.args.get('filtro_resultado', '')
     
-    # --- PAGINAÇÃO (ESTA É A PARTE QUE FALTA NO SEU ARQUIVO) ---
+    
     page = request.args.get('page', 1, type=int)
-    per_page = 10  # 10 itens por página
+    per_page = 5  # 10 itens por página
 
     query = Resposta.query.filter_by(usuario_id=usuario_id)
 
@@ -609,33 +612,50 @@ def pagina_ranking_detalhe(departamento_id):
 
 @app.route('/admin', methods=['GET', 'POST'])
 def pagina_admin():
+    # Limpeza de sessão de CSV
     if 'csv_data' in session:
         session.pop('csv_data', None)
         session.pop('has_valid_rows', None)
         session.pop('csv_headers', None)
 
-    senha_correta = session.get('admin_logged_in', False)
-    if request.method == 'POST' and not senha_correta:
-        if request.form.get('senha') == SENHA_ADMIN:
-            session['admin_logged_in'] = True
-            senha_correta = True
-        else:
-            flash('Senha incorreta!', 'danger')
+    # Verifica se já está logado
+    esta_logado = session.get('admin_logged_in', False)
     
-    # Inicializa 'perguntas' como None ou lista vazia para evitar erro se não estiver logado
+    # --- LÓGICA DE LOGIN ---
+    if request.method == 'POST' and not esta_logado:
+        email = request.form.get('email')
+        senha = request.form.get('senha')
+        
+        # Busca o admin pelo e-mail
+        admin = Administrador.query.filter_by(email=email).first()
+        
+        # Verifica se o admin existe e se a senha bate
+        if admin and admin.check_senha(senha):
+            session['admin_logged_in'] = True
+            session['admin_nome'] = admin.nome
+            session['admin_id'] = admin.id
+            esta_logado = True
+            flash(f'Bem-vindo, {admin.nome}!', 'success')
+        else:
+            flash('E-mail ou senha incorretos.', 'danger')
+    
+    # Inicializa variáveis
     perguntas = None 
-    usuarios, departamentos = [], []
+    usuarios = []
+    departamentos = []
+    admins = [] 
     contagem_pendentes = 0
     filtros_ativos = {}
 
-    if senha_correta:
-        usuarios = Usuario.query.join(Departamento).order_by(Departamento.nome, Usuario.nome).all()
+    if esta_logado:
+        # Carrega dados apenas se logado
+        usuarios = Usuario.query.options(joinedload(Usuario.departamento)).order_by(Usuario.nome).all()
         departamentos = Departamento.query.order_by(Departamento.nome).all()
+        admins = Administrador.query.order_by(Administrador.nome).all()
         contagem_pendentes = Resposta.query.join(Pergunta).filter(Pergunta.tipo == 'discursiva', Resposta.status_correcao == 'pendente').count()
 
-        # --- Lógica de Filtros ---
+        # --- Lógica de Filtros e Paginação ---
         query_perguntas = Pergunta.query
-
         filtro_mes = request.args.get('filtro_mes')
         filtro_setor_id = request.args.get('filtro_setor', type=int)
         filtro_tipo = request.args.get('filtro_tipo')
@@ -673,12 +693,91 @@ def pagina_admin():
         ).paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template('admin.html', 
-                           senha_correta=senha_correta, 
+                           senha_correta=esta_logado, 
                            perguntas=perguntas, 
                            usuarios=usuarios, 
                            departamentos=departamentos,
+                           admins=admins,
                            contagem_pendentes=contagem_pendentes,
-                           filtros=filtros_ativos)
+                           filtros=filtros_ativos)  # <--- VERIFIQUE SE ESTE PARÊNTESE ESTÁ FECHADO AQUI
+
+@app.route('/admin/add_admin', methods=['POST'])
+def adicionar_admin():
+    if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
+    nome = request.form.get('nome')
+    email = request.form.get('email')
+    senha = request.form.get('senha')
+    
+    if Administrador.query.filter_by(email=email).first():
+        flash('Erro: Este e-mail já é um administrador.', 'danger')
+    else:
+        novo_admin = Administrador(nome=nome, email=email)
+        novo_admin.set_senha(senha)
+        db.session.add(novo_admin)
+        db.session.commit()
+        flash(f'Administrador {nome} adicionado com sucesso!', 'success')
+        
+    return redirect(url_for('pagina_admin'))  
+
+@app.route('/admin/edit_admin/<int:admin_id>', methods=['GET', 'POST'])
+def editar_admin(admin_id):
+    # Verifica se está logado
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+    
+    # Busca o administrador pelo ID ou retorna erro 404 se não achar
+    admin = Administrador.query.get_or_404(admin_id)
+
+    if request.method == 'POST':
+        novo_nome = request.form.get('nome')
+        novo_email = request.form.get('email')
+        nova_senha = request.form.get('senha')
+
+        # Verifica se o e-mail já existe em OUTRO administrador
+        email_existente = Administrador.query.filter(Administrador.email == novo_email, Administrador.id != admin_id).first()
+        if email_existente:
+            flash('Erro: Este e-mail já está em uso por outro administrador.', 'danger')
+            return render_template('edit_admin.html', admin=admin)
+
+        # Atualiza os dados
+        admin.nome = novo_nome
+        admin.email = novo_email
+
+        # Só atualiza a senha se o campo não estiver vazio
+        if nova_senha:
+            admin.set_senha(nova_senha) # Usa o método de hash da sua classe
+            flash(f'Dados e senha de "{admin.nome}" atualizados com sucesso!', 'success')
+        else:
+            flash(f'Dados de "{admin.nome}" atualizados com sucesso!', 'success')
+
+        db.session.commit()
+        return redirect(url_for('pagina_admin'))
+
+    return render_template('edit_admin.html', admin=admin)   
+
+@app.route('/admin/delete_admin/<int:admin_id>', methods=['POST'])
+def excluir_admin(admin_id):
+    # Verifica se está logado
+    if not session.get('admin_logged_in'): 
+        return redirect(url_for('pagina_admin'))
+    
+    # Previne que o administrador exclua a si mesmo
+    if admin_id == session.get('admin_id'):
+        flash('Erro: Você não pode excluir sua própria conta enquanto está logado.', 'danger')
+        return redirect(url_for('pagina_admin'))
+
+    admin = Administrador.query.get_or_404(admin_id)
+    
+    try:
+        db.session.delete(admin)
+        db.session.commit()
+        flash(f'Administrador "{admin.nome}" excluído com sucesso.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir administrador: {e}', 'danger')
+
+    return redirect(url_for('pagina_admin'))                   
 
 @app.route('/admin/add_department', methods=['POST'])
 def adicionar_setor():
@@ -1317,6 +1416,14 @@ def init_db(secret_key):
     except Exception as e:
         app.logger.error(f"Ocorreu um erro na inicialização do banco de dados: {e}")
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
+
+@app.errorhandler(404)
+def pagina_nao_encontrada(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def erro_servidor(e):
+    return render_template('500.html'), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

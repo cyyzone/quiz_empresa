@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Administrador{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1>Editar Administrador: {{ admin.nome }}</h1>
+
+    <form method="post" style="text-align: left; max-width: 500px; margin: auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+        <label for="nome">Nome:</label><br>
+        <input type="text" name="nome" style="width: 100%;" value="{{ admin.nome }}" required><br><br>
+
+        <label for="email">E-mail:</label><br>
+        <input type="email" name="email" style="width: 100%;" value="{{ admin.email }}" required><br><br>
+
+        <label for="senha">Nova Senha (Opcional):</label><br>
+        <input type="password" name="senha" style="width: 100%;" placeholder="Deixe em branco para manter a atual"><br>
+        <small style="color: #666;">Só preencha se quiser alterar a senha.</small><br><br>
+
+        <button type="submit" class="btn">Salvar Alterações</button>
+        <a href="{{ url_for('pagina_admin') }}" style="margin-left: 10px;">Cancelar</a>
+    </form>
+</div>
+{% endblock %}
