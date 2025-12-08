@@ -4,6 +4,11 @@
 
 {% block content %}
 <div class="quiz-container">
+    <div style="text-align: right; margin-bottom: 10px;">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary" style="padding: 5px 15px; font-size: 14px; background-color: #6c757d; border: none;">
+            ⏸️ Sair e Continuar Depois
+        </a>
+    </div>
     <div id="timer" class="timer">{{ pergunta.tempo_limite or 30 }}</div>
     
     <p class="question">{{ pergunta.texto }}</p>

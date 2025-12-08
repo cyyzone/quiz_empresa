@@ -1258,35 +1258,31 @@ def upload_planilha():
     
     arquivo = request.files.get('arquivo_planilha')
     
-    # 1. Verifica se a extensão é válida (.xls, .xlsx OU .csv)
     if not arquivo or not (arquivo.filename.lower().endswith(('.xls', '.xlsx', '.csv'))):
         flash('Arquivo inválido. Envie uma planilha Excel (.xls, .xlsx) ou CSV (.csv).', 'danger')
         return redirect(url_for('pagina_admin'))
     
     try:
-        # 2. Lê o arquivo de acordo com a extensão
         if arquivo.filename.lower().endswith('.csv'):
-            # Lê CSV (lida com aspas e novas linhas automaticamente)
-            df = pd.read_csv(arquivo, encoding='utf-8')
+            # --- MUDANÇA AQUI ---
+            # sep=None e engine='python' fazem o Pandas 'adivinhar' se é , ou ;
+            # on_bad_lines='skip' ignora linhas quebradas em vez de travar tudo (opcional)
+            df = pd.read_csv(arquivo, sep=None, engine='python', encoding='utf-8')
         else:
-            # Lê Excel
             df = pd.read_excel(arquivo)
             
         df = df.fillna('')
         
-        # Formata datas se existirem
+        # Tratamento de datas e limpeza
         if 'data_liberacao' in df.columns:
-            # Tenta converter, se der erro mantém o original (coerce)
             df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df['data_liberacao'])
 
-        # Converte tudo para string para evitar erros no HTML
         for col in df.columns:
             df[col] = df[col].astype(str).str.replace(r'\.0$', '', regex=True)
 
         headers = df.columns.tolist()
         dados_da_planilha = df.to_dict(orient='records')
         
-        # Validação
         validated_data = []
         has_valid_rows = False
         for row in dados_da_planilha:
@@ -1302,9 +1298,10 @@ def upload_planilha():
         
     except Exception as e:
         app.logger.error(f"Erro ao ler a planilha: {e}")
-        flash(f"Ocorreu um erro ao processar o arquivo. Verifique se o formato está correto. Erro: {e}", "danger")
+        # Mensagem de erro mais amigável
+        flash(f"Erro ao ler o arquivo. Dica: Se for CSV, verifique se os textos com vírgulas estão entre aspas. Erro técnico: {e}", "danger")
         return redirect(url_for('pagina_admin'))
-
+        
 @app.route('/admin/preview_csv')
 def preview_csv():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
