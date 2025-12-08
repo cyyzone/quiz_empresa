@@ -39,7 +39,7 @@
 
     <hr style="margin: 30px 0;">
 
-    {% for resposta in respostas %}
+    {% for resposta in respostas.items %}
     <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid {{ '#ffc107' if resposta.status_correcao == 'pendente' else '#28a745' if resposta.status_correcao == 'correto' else '#fd7e14' if resposta.status_correcao == 'parcialmente_correto' else '#dc3545' }};">
 
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
@@ -127,6 +127,28 @@
         </p>
     </div>
     {% endfor %}
+
+    {% if respostas.pages > 1 %}
+    <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
+        
+        {% if respostas.has_prev %}
+            <a href="{{ url_for('pagina_correcoes', page=respostas.prev_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                &laquo; Anterior
+            </a>
+        {% endif %}
+
+        <span style="font-weight: bold; color: #555;">
+            Página {{ respostas.page }} de {{ respostas.pages }}
+        </span>
+
+        {% if respostas.has_next %}
+            <a href="{{ url_for('pagina_correcoes', page=respostas.next_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+                Próximo &raquo;
+            </a>
+        {% endif %}
+        
+    </div>
+    {% endif %}
 
     <div style="text-align: center; margin-top: 20px;">
         <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Voltar para o Admin</a>

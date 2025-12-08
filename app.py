@@ -1062,20 +1062,33 @@ def excluir_pergunta(pergunta_id):
     flash('Pergunta e todas as suas respostas foram excluídas com sucesso.', 'success')
     return redirect(url_for('pagina_admin'))
 
+# Em app.py
+
 @app.route('/admin/correcoes')
 def pagina_correcoes():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
     status_selecionado = request.args.get('status', 'pendente')
+    
+    # --- NOVO: Configuração da página atual ---
+    page = request.args.get('page', 1, type=int)
+    per_page = 5  # Define quantas respostas aparecem por página
+    
     query = Resposta.query.join(Pergunta).filter(Pergunta.tipo == 'discursiva')
+    
     if status_selecionado != 'todos':
         query = query.filter(Resposta.status_correcao == status_selecionado)
     if usuario_selecionado_id:
         query = query.filter(Resposta.usuario_id == usuario_selecionado_id)
-    respostas_filtradas = query.join(Usuario).order_by(Resposta.data_resposta.desc()).all()
+    
+    # --- ALTERADO: Usando .paginate() em vez de .all() ---
+    # Guardamos o objeto de paginação na variável 'respostas_pagination'
+    respostas_pagination = query.join(Usuario).order_by(Resposta.data_resposta.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    
     return render_template('correcoes.html', 
-                           respostas=respostas_filtradas, 
+                           respostas=respostas_pagination, # Passamos o objeto paginado
                            usuarios_disponiveis=usuarios_disponiveis, 
                            usuario_selecionado_id=usuario_selecionado_id,
                            status_selecionado=status_selecionado)
@@ -1301,7 +1314,7 @@ def upload_planilha():
         # Mensagem de erro mais amigável
         flash(f"Erro ao ler o arquivo. Dica: Se for CSV, verifique se os textos com vírgulas estão entre aspas. Erro técnico: {e}", "danger")
         return redirect(url_for('pagina_admin'))
-        
+
 @app.route('/admin/preview_csv')
 def preview_csv():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
