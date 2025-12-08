@@ -394,3 +394,137 @@ select {
     padding: 0;
     line-height: 1;
 }
+/* --- Estilos Específicos para a Pré-visualização de CSV --- */
+
+/* Container que permite a rolagem horizontal */
+.table-responsive {
+    overflow-x: auto;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1200px; /* Força a tabela a ser larga, ativando a rolagem */
+}
+
+.preview-table th, 
+.preview-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+
+.preview-table th {
+    background-color: var(--cor-primaria);
+    color: white;
+    font-weight: bold;
+    white-space: nowrap; /* Impede que o cabeçalho quebre linha */
+    position: sticky; /* (Opcional) Mantém o cabeçalho fixo ao rolar */
+    top: 0;
+}
+
+/* Estilo dos inputs dentro da tabela */
+.preview-input {
+    width: 100%;
+    min-width: 150px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: #fff;
+    transition: border-color 0.3s;
+    box-sizing: border-box; /* Importante para não quebrar o layout */
+    font-family: inherit; /* Mantém a fonte do site */
+}
+
+/* Ajuste específico para as áreas de texto longas */
+textarea.preview-input {
+    min-width: 300px; /* Dá mais espaço para perguntas e explicações */
+    resize: vertical; /* Permite o usuário aumentar se quiser */
+    line-height: 1.4;
+}
+
+.preview-input:focus {
+    border-color: var(--cor-acento);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(102, 223, 78, 0.2);
+}
+
+/* Destaque para células com erro */
+.cell-error {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff8f8 !important;
+}
+
+/* Status das linhas */
+.status-valid {
+    color: #28a745;
+    font-weight: bold;
+    background-color: #e8f5e9;
+    white-space: nowrap;
+}
+
+.status-invalid {
+    color: #dc3545;
+    font-weight: bold;
+    background-color: #fde8e8;
+    white-space: nowrap;
+}
+
+/* --- Estilos para Pré-visualização de CSV --- */
+.table-responsive {
+    overflow-x: auto;
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1200px; /* Força a rolagem se a tela for pequena */
+}
+
+.preview-table th, .preview-table td {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+.preview-table th {
+    background-color: var(--cor-primaria);
+    color: white;
+    white-space: nowrap;
+}
+
+.preview-input {
+    width: 100%;
+    min-width: 150px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+/* Estilo especial para as áreas de texto maiores */
+textarea.preview-input {
+    min-width: 300px;
+    resize: vertical;
+}
+
+.cell-error {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff8f8 !important;
+}
+
+.status-valid { background-color: #d4edda; color: #155724; font-weight: bold; white-space: nowrap; text-align: center; }
+.status-invalid { background-color: #f8d7da; color: #721c24; font-weight: bold; white-space: nowrap; text-align: center; }

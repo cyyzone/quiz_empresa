@@ -1255,33 +1255,54 @@ def pagina_analytics():
 @app.route('/admin/upload_planilha', methods=['POST'])
 def upload_planilha():
     if not session.get('admin_logged_in'): return redirect(url_for('pagina_admin'))
+    
     arquivo = request.files.get('arquivo_planilha')
-    if not arquivo or not (arquivo.filename.lower().endswith('.xls') or arquivo.filename.lower().endswith('.xlsx')):
-        flash('Arquivo inválido ou não selecionado. Envie uma planilha .xls ou .xlsx.', 'danger')
+    
+    # 1. Verifica se a extensão é válida (.xls, .xlsx OU .csv)
+    if not arquivo or not (arquivo.filename.lower().endswith(('.xls', '.xlsx', '.csv'))):
+        flash('Arquivo inválido. Envie uma planilha Excel (.xls, .xlsx) ou CSV (.csv).', 'danger')
         return redirect(url_for('pagina_admin'))
+    
     try:
-        df = pd.read_excel(arquivo)
+        # 2. Lê o arquivo de acordo com a extensão
+        if arquivo.filename.lower().endswith('.csv'):
+            # Lê CSV (lida com aspas e novas linhas automaticamente)
+            df = pd.read_csv(arquivo, encoding='utf-8')
+        else:
+            # Lê Excel
+            df = pd.read_excel(arquivo)
+            
         df = df.fillna('')
+        
+        # Formata datas se existirem
         if 'data_liberacao' in df.columns:
-            df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce').dt.strftime('%d/%m/%Y').fillna('')
+            # Tenta converter, se der erro mantém o original (coerce)
+            df['data_liberacao'] = pd.to_datetime(df['data_liberacao'], errors='coerce').dt.strftime('%d/%m/%Y').fillna(df['data_liberacao'])
+
+        # Converte tudo para string para evitar erros no HTML
         for col in df.columns:
-            if col != 'data_liberacao':
-                df[col] = df[col].astype(str).str.replace(r'\.0$', '', regex=True)
+            df[col] = df[col].astype(str).str.replace(r'\.0$', '', regex=True)
+
         headers = df.columns.tolist()
         dados_da_planilha = df.to_dict(orient='records')
-        session['csv_headers'] = headers
+        
+        # Validação
         validated_data = []
         has_valid_rows = False
         for row in dados_da_planilha:
             is_valid, errors = validar_linha(row)
             if is_valid: has_valid_rows = True
             validated_data.append({'data': row, 'is_valid': is_valid, 'errors': errors})
+            
+        session['csv_headers'] = headers
         session['csv_data'] = validated_data
         session['has_valid_rows'] = has_valid_rows
+        
         return redirect(url_for('preview_csv'))
+        
     except Exception as e:
-        app.logger.error(f"Erro ao ler a planilha Excel: {e}")
-        flash(f"Ocorreu um erro inesperado ao processar a planilha: {e}", "danger")
+        app.logger.error(f"Erro ao ler a planilha: {e}")
+        flash(f"Ocorreu um erro ao processar o arquivo. Verifique se o formato está correto. Erro: {e}", "danger")
         return redirect(url_for('pagina_admin'))
 
 @app.route('/admin/preview_csv')
@@ -1297,8 +1318,6 @@ def processar_edicao_csv():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
 
-    # 1. Reconstrói os dados da planilha a partir do formulário editado
-    # Isso funciona automaticamente para QUALQUER coluna que estiver na planilha (incluindo 'setor' e 'explicacao')
     rows_data = defaultdict(dict)
     for key, value in request.form.items():
         if key.startswith('row-'):
@@ -1310,7 +1329,6 @@ def processar_edicao_csv():
     success_count = 0
     error_count = 0
     
-    # 2. Loop através das linhas para salvar no banco
     for row_index in sorted(rows_data.keys()):
         row = rows_data[row_index]
         is_valid, errors = validar_linha(row) 
@@ -1319,12 +1337,10 @@ def processar_edicao_csv():
             try:
                 data_obj = datetime.strptime(row['data_liberacao'], '%d/%m/%Y').date()
                 
-                # --- CRIAÇÃO DA PERGUNTA ---
                 nova_pergunta = Pergunta(
                     tipo=row['tipo'], 
                     texto=row['texto'],
-                    # AQUI: Pega a explicação da planilha
-                    explicacao=row.get('explicacao'), 
+                    explicacao=row.get('explicacao'), # Pega a explicação da planilha
                     opcao_a=row.get('opcao_a') or None, 
                     opcao_b=row.get('opcao_b') or None,
                     opcao_c=row.get('opcao_c') or None, 
@@ -1334,43 +1350,35 @@ def processar_edicao_csv():
                     tempo_limite=int(float(row['tempo_limite'])) if row.get('tempo_limite') else None
                 )
 
-                # --- LÓGICA DE SETORES (IMPORTAÇÃO) ---
+                # Lógica de Setor (Ex: "Vendas, Suporte" ou "Todos")
                 campo_setor = row.get('setor', '').strip()
-                
-                # Se estiver vazio ou escrito "Todos", marca para todos
                 if not campo_setor or campo_setor.lower() == 'todos':
                     nova_pergunta.para_todos_setores = True
                 else:
                     nova_pergunta.para_todos_setores = False
-                    # Separa por vírgula se houver mais de um setor (ex: "Vendas, Suporte")
                     nomes_setores = [s.strip() for s in campo_setor.split(',') if s.strip()]
-                    
-                    # Busca os departamentos no banco de dados pelos nomes
                     if nomes_setores:
-                        deptos_encontrados = Departamento.query.filter(Departamento.nome.in_(nomes_setores)).all()
-                        nova_pergunta.departamentos = deptos_encontrados
+                        deptos = Departamento.query.filter(Departamento.nome.in_(nomes_setores)).all()
+                        nova_pergunta.departamentos = deptos
                 
                 db.session.add(nova_pergunta)
                 db.session.commit()
-                
                 success_count += 1
             except Exception as e:
                 db.session.rollback()
                 error_count += 1
-                app.logger.error(f"Erro ao salvar linha {row_index}: {e} | Dados: {row}")
+                app.logger.error(f"Erro ao salvar linha {row_index}: {e}")
         else:
             error_count += 1
-            app.logger.error(f"Linha {row_index} inválida: {errors}")
 
-    # Limpa a sessão
     session.pop('csv_data', None)
     session.pop('has_valid_rows', None)
     session.pop('csv_headers', None)
     
     if error_count > 0:
-        flash(f'Importação parcial: {success_count} perguntas salvas. {error_count} linhas ignoradas (erros ou setores não encontrados).', 'warning')
+        flash(f'Importação parcial: {success_count} salvas. {error_count} ignoradas.', 'warning')
     else:
-        flash(f'Importação concluída! {success_count} perguntas importadas com sucesso!', 'success')
+        flash(f'Importação concluída! {success_count} perguntas importadas.', 'success')
         
     return redirect(url_for('pagina_admin'))
 

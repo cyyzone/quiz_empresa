@@ -5,14 +5,20 @@
 {% block content %}
 <div class="dashboard-container" style="max-width: 95%;">
     <h1>Pré-visualização e Validação da Planilha</h1>
-    <p>Corrija os erros diretamente na tabela. As linhas em verde estão prontas para importação. As linhas em vermelho precisam de correção.</p>
+    <p>Corrija os erros diretamente na tabela abaixo. Role para o lado para ver todas as colunas.</p>
+    
+    <div style="margin-bottom: 20px; font-size: 0.9em; color: #666;">
+        <span style="display:inline-block; width: 12px; height: 12px; background-color: #28a745; border-radius: 50%; margin-right: 5px;"></span> Linhas Verdes: Prontas para importar.
+        <span style="display:inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%; margin-left: 15px; margin-right: 5px;"></span> Linhas Vermelhas: Precisam de correção.
+    </div>
 
     <form action="{{ url_for('processar_edicao_csv') }}" method="post">
-        <div class="ranking-container" style="max-width: 100%; overflow-x: auto;">
+        
+        <div class="table-responsive">
             <table class="preview-table">
                 <thead>
                     <tr>
-                        <th>Status</th>
+                        <th style="min-width: 100px;">Status</th>
                         {% for header in headers %}
                             <th>{{ header }}</th>
                         {% endfor %}
@@ -21,19 +27,37 @@
                 <tbody>
                     {% for row_item in data %}
                         {% set row_index = loop.index0 %}
-                        <tr class="{{ 'valid-row' if row_item.is_valid else 'invalid-row' }}">
-                            <td>
-                                {% if row_item.is_valid %} ✔️ Válido {% else %} ❌ Erro {% endif %}
+                        <tr>
+                            <td class="{{ 'status-valid' if row_item.is_valid else 'status-invalid' }}">
+                                {% if row_item.is_valid %} 
+                                    ✔️ Válido 
+                                {% else %} 
+                                    ❌ Erro 
+                                {% endif %}
                             </td>
                             
                             {% for key in headers %}
                                 <td>
-                                    <input type="text" 
-                                           name="row-{{ row_index }}-{{ key }}" 
-                                           value="{{ row_item.data.get(key, '') }}"
-                                           class="{{ 'cell-error' if key in row_item.errors else '' }}"
-                                           title="{{ row_item.errors.get(key, '') }}"
-                                           style="width: 100%; min-width: 150px; box-sizing: border-box;">
+                                    {% if key in ['texto', 'explicacao', 'opcao_a', 'opcao_b', 'opcao_c', 'opcao_d'] %}
+                                        <textarea 
+                                            name="row-{{ row_index }}-{{ key }}" 
+                                            class="preview-input {{ 'cell-error' if key in row_item.errors else '' }}"
+                                            rows="3"
+                                            title="{{ row_item.errors.get(key, '') }}"
+                                        >{{ row_item.data.get(key, '') }}</textarea>
+                                    {% else %}
+                                        <input type="text" 
+                                               name="row-{{ row_index }}-{{ key }}" 
+                                               value="{{ row_item.data.get(key, '') }}"
+                                               class="preview-input {{ 'cell-error' if key in row_item.errors else '' }}"
+                                               title="{{ row_item.errors.get(key, '') }}">
+                                    {% endif %}
+                                           
+                                    {% if key in row_item.errors %}
+                                        <div style="color: #dc3545; font-size: 11px; margin-top: 4px; font-weight: bold;">
+                                            {{ row_item.errors[key] }}
+                                        </div>
+                                    {% endif %}
                                 </td>
                             {% endfor %}
                         </tr>
@@ -42,9 +66,9 @@
             </table>
         </div>
 
-        <div style="margin-top: 30px;">
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary" style="margin-right: 10px;">Cancelar</a>
             <button type="submit" class="btn">Importar Perguntas Corrigidas</button>
-            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
 
