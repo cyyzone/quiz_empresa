@@ -1,6 +1,7 @@
 # --- INÍCIO DAS IMPORTAÇÕES: Ferramentas que meu projeto precisa ---
 from flask import Flask, render_template, request, redirect, url_for, session, flash # Importo as ferramentas principais do Flask para criar as páginas,lidar com formulários, redirecionar usuários e gerenciar sessões. 
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func, case, desc
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy # Importo o SQLAlchemy para conectar e conversar com meu banco de dados usando Python.
 from sqlalchemy.sql import func, case # Importo funções específicas do SQLAlchemy para fazer cálculos (como somas e contagens), e criar lógicas condicionais (case) e de OU (or_) nas buscas ao banco.
@@ -91,14 +92,14 @@ class Pergunta(db.Model):  # Crio a tabela principal, que armazena todas as perg
 class Resposta(db.Model): # Crio a tabela que guarda todas as respostas dadas pelos usuários.
     id = db.Column(db.Integer, primary_key=True) # A chave primária para cada resposta.
     pontos = db.Column(db.Integer, nullable=True) # A pontuação obtida na resposta. Pode ser nula para perguntas discursivas que ainda não foram corrigidas.
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False) # A "chave estrangeira" que conecta a resposta ao usuário que a deu.
-    pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False) # A "chave estrangeira" que conecta a resposta à pergunta correspondente.
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False, index=True) # A "chave estrangeira" que conecta a resposta ao usuário que a deu.
+    pergunta_id = db.Column(db.Integer, db.ForeignKey('pergunta.id'), nullable=False, index=True) # A "chave estrangeira" que conecta a resposta à pergunta correspondente.
     resposta_dada = db.Column(db.String(1), nullable=True)  # A resposta dada pelo usuário ('a', 'b', 'v', etc.). Pode ser nula para perguntas discursivas.
-    data_resposta = db.Column(db.DateTime, default=datetime.utcnow) # A data e hora em que a resposta foi dada. O padrão é o momento atual (UTC).
+    data_resposta = db.Column(db.DateTime, default=datetime.utcnow, index=True) # A data e hora em que a resposta foi dada. O padrão é o momento atual (UTC).
     pergunta = db.relationship('Pergunta') # Crio a relação com a tabela de perguntas. Isso me permite acessar `resposta.pergunta` para ver os detalhes da pergunta associada a esta resposta.
     texto_discursivo = db.Column(db.Text, nullable=True)    # O texto da resposta para perguntas discursivas. Pode ser nulo para perguntas objetivas.
     anexo_resposta = db.Column(db.String(300), nullable=True) # O link do anexo da resposta (do Cloudinary). Pode ser nulo se não houver anexo.
-    status_correcao = db.Column(db.String(20), nullable=False, default='nao_respondido') # O status da correção para perguntas discursivas. Pode ser 'pendente', 'correto', 'incorreto', etc.
+    status_correcao = db.Column(db.String(20), nullable=False, default='nao_respondido', index=True) # O status da correção para perguntas discursivas. Pode ser 'pendente', 'correto', 'incorreto', etc.
     feedback_admin = db.Column(db.Text, nullable=True) # O feedback escrito pelo admin após corrigir uma pergunta discursiva. Pode ser nulo se ainda não foi corrigido.
     feedback_visto = db.Column(db.Boolean, default=False, nullable=False) # Um campo booleano para marcar se o usuário já viu o feedback do admin. O padrão é False (não visto).
 
@@ -1186,45 +1187,53 @@ def pagina_analytics():
     if not session.get('admin_logged_in'): 
         return redirect(url_for('pagina_admin'))
     
+    # 1. Carrega dados para os filtros
     usuarios_disponiveis = Usuario.query.order_by(Usuario.nome).all()
     departamentos = Departamento.query.order_by(Departamento.nome).all()
     
+    # 2. Obtém os parâmetros da URL
     usuario_selecionado_id = request.args.get('usuario_id', type=int)
     depto_selecionado_id = request.args.get('departamento_id', type=int)
     filtro_acertos = request.args.get('filtro_acertos', 'erros')
     filtro_tipo = request.args.get('filtro_tipo')
 
-    # --- Lógica para "Percentual de Erros por Pergunta" ---
-    base_query_stats = Resposta.query.join(Pergunta)
+    # --- PARTE 1: Percentual de Erros por Pergunta (OTIMIZADO) ---
+    # Esta query faz o cálculo direto no banco de dados, evitando carregar tudo para o Python
+    query_stats = db.session.query(
+        Pergunta.texto,
+        func.count(Resposta.id).label('total'),
+        func.sum(case((Resposta.pontos == 0, 1), else_=0)).label('erros')
+    ).join(Resposta).join(Usuario)
     
+    # Filtros da Parte 1
     if filtro_tipo:
-        base_query_stats = base_query_stats.filter(Pergunta.tipo == filtro_tipo)
+        query_stats = query_stats.filter(Pergunta.tipo == filtro_tipo)
     else:
-        base_query_stats = base_query_stats.filter(Pergunta.tipo != 'discursiva')
+        query_stats = query_stats.filter(Pergunta.tipo != 'discursiva')
         
     if depto_selecionado_id:
-        base_query_stats = base_query_stats.join(Usuario).filter(Usuario.departamento_id == depto_selecionado_id)
+        query_stats = query_stats.filter(Usuario.departamento_id == depto_selecionado_id)
     if usuario_selecionado_id:
-        base_query_stats = base_query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
+        query_stats = query_stats.filter(Resposta.usuario_id == usuario_selecionado_id)
     
-    todas_as_respostas = base_query_stats.all()
-    stats_perguntas_raw = defaultdict(lambda: {'total': 0, 'erros': 0})
-    for resposta in todas_as_respostas:
-        stats_perguntas_raw[resposta.pergunta_id]['total'] += 1
-        if resposta.pontos == 0:
-            stats_perguntas_raw[resposta.pergunta_id]['erros'] += 1
+    # Executa a query agrupada
+    resultados_agrupados = query_stats.group_by(Pergunta.id).all()
     
     stats_perguntas = []
-    for pergunta_id, data in stats_perguntas_raw.items():
-        pergunta = Pergunta.query.get(pergunta_id)
-        if pergunta:
-            percentual = (data['erros'] / data['total']) * 100 if data['total'] > 0 else 0
-            stats_perguntas.append({'texto': pergunta.texto, 'total': data['total'], 'erros': data['erros'], 'percentual': percentual})
+    for row in resultados_agrupados:
+        percentual = (row.erros / row.total * 100) if row.total > 0 else 0
+        stats_perguntas.append({
+            'texto': row.texto,
+            'total': row.total,
+            'erros': row.erros,
+            'percentual': percentual
+        })
     stats_perguntas.sort(key=lambda x: x['percentual'], reverse=True)
 
-    # --- Lógica para "Análise Detalhada" (Acertos ou Erros) ---
+    # --- PARTE 2: Análise Detalhada (Acertos ou Erros) ---
     query_detalhada = Resposta.query.join(Pergunta).join(Usuario).join(Departamento)
 
+    # Filtros da Parte 2
     if filtro_tipo:
         query_detalhada = query_detalhada.filter(Pergunta.tipo == filtro_tipo)
     else:
@@ -1242,6 +1251,7 @@ def pagina_analytics():
     
     respostas_detalhadas = query_detalhada.order_by(Departamento.nome, Usuario.nome).all()
     
+    # Processamento para o template
     dados_agrupados = defaultdict(lambda: defaultdict(list))
     for r in respostas_detalhadas:
         setor_nome = r.usuario.departamento.nome
