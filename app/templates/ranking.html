@@ -23,7 +23,7 @@
             <tr>
                 <td><b>{{ loop.index }}</b></td>
                 <td>
-                    <a href="{{ url_for('pagina_ranking_detalhe', departamento_id=depto.id) }}" title="Ver ranking individual de {{ depto.nome }}">
+                    <a href="{{ url_for('user.pagina_ranking_detalhe', departamento_id=depto.id) }}" title="Ver ranking individual de {{ depto.nome }}">
                         {{ depto.nome }}
                     </a>
                 </td>
@@ -39,7 +39,7 @@
         </tbody>
     </table>
     <div style="text-align: center; margin-top: 20px;">
-        <a href="{{ url_for('dashboard') }}">Voltar para o Dashboard</a>
+        <a href="{{ url_for('user.dashboard') }}">Voltar para o Dashboard</a>
     </div>
 </div>
 {% endblock %}

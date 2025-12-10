@@ -5,7 +5,7 @@
 {% block content %}
 <div class="dashboard-container" style="max-width: 900px; text-align: left;">
     <div style="text-align: center; margin-top: 30px;">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
+        <a href="{{ url_for('user.dashboard') }}" class="btn btn-secondary">Voltar ao Dashboard</a>
     </div>
     <h1 style="text-align: center;">📝 Atividades Discursivas 📝</h1>
     <p style="text-align: center;">Estas são atividades sem tempo para aprofundar seu conhecimento. Suas respostas serão avaliadas por um administrador.</p>
@@ -21,7 +21,7 @@
                 {% if atividade.id in respostas_dadas %}
                     <span class="btn btn-secondary" style="background-color: #d4edda; color: #155724; cursor: default;">✔️ Respondido</span>
                 {% else %}
-                    <a href="{{ url_for('responder_atividade', pergunta_id=atividade.id) }}" class="btn">Responder</a>
+                    <a href="{{ url_for('user.responder_atividade', pergunta_id=atividade.id) }}" class="btn">Responder</a>
                 {% endif %}
             </div>
         </div>
@@ -35,7 +35,7 @@
     <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
         
         {% if atividades.has_prev %}
-            <a href="{{ url_for('pagina_atividades', page=atividades.prev_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+            <a href="{{ url_for('user.pagina_atividades', page=atividades.prev_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
                 &laquo; Anterior
             </a>
         {% endif %}
@@ -45,7 +45,7 @@
         </span>
 
         {% if atividades.has_next %}
-            <a href="{{ url_for('pagina_atividades', page=atividades.next_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+            <a href="{{ url_for('user.pagina_atividades', page=atividades.next_num) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
                 Próximo &raquo;
             </a>
         {% endif %}

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="quiz-container">
     <div style="text-align: right; margin-bottom: 10px;">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary" style="padding: 5px 15px; font-size: 14px; background-color: #6c757d; border: none;">
+        <a href="{{ url_for('user.dashboard') }}" class="btn btn-secondary" style="padding: 5px 15px; font-size: 14px; background-color: #6c757d; border: none;">
             ⏸️ Sair e Continuar Depois
         </a>
     </div>
@@ -25,7 +25,7 @@
         </div>
     {% endif %}
 
-    <form id="quiz-form" action="{{ url_for('processa_resposta') }}" method="post">
+    <form id="quiz-form" action="{{ url_for('user.processa_resposta') }}" method="post">
         <input type="hidden" name="pergunta_id" value="{{ pergunta.id }}">
         <input type="hidden" name="tempo_restante" id="tempo_restante" value="{{ pergunta.tempo_limite or 30 }}">
         

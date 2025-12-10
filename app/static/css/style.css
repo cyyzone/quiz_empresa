@@ -535,3 +535,45 @@ textarea.preview-input {
     background-color: #d1ecf1;
     border-color: #bee5eb;
 }
+
+/* Estilo para o Acordeão de Analytics */
+.setor-header {
+    background-color: var(--cor-primaria);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    transition: background-color 0.3s;
+}
+
+.setor-header:hover {
+    background-color: #0e4b3a; /* Um tom mais escuro */
+}
+
+.setor-content {
+    display: none; /* Começa escondido */
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    background-color: white;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.setor-content.active {
+    display: block; /* Aparece quando ativo */
+}
+
+.setor-icon {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

@@ -96,7 +96,7 @@
         <input type="date" name="data_liberacao" value="{{ pergunta.data_liberacao.strftime('%Y-%m-%d') }}" required><br><br>
 
         <button type="submit" class="btn">Salvar Alterações</button>
-        <a href="{{ url_for('pagina_admin') }}" style="margin-left: 10px;">Cancelar</a>
+        <a href="{{ url_for('admin.pagina_admin') }}" style="margin-left: 10px;">Cancelar</a>
     </form>
 </div>
 {% endblock %}

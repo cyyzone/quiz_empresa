@@ -12,7 +12,7 @@
         <span style="display:inline-block; width: 12px; height: 12px; background-color: #dc3545; border-radius: 50%; margin-left: 15px; margin-right: 5px;"></span> Linhas Vermelhas: Precisam de correção.
     </div>
 
-    <form action="{{ url_for('processar_edicao_csv') }}" method="post">
+    <form action="{{ url_for('admin.processar_edicao_csv') }}" method="post">
         
         <div class="table-responsive">
             <table class="preview-table">
@@ -67,7 +67,7 @@
         </div>
 
         <div style="margin-top: 30px; text-align: center;">
-            <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary" style="margin-right: 10px;">Cancelar</a>
+            <a href="{{ url_for('admin.pagina_admin') }}" class="btn btn-secondary" style="margin-right: 10px;">Cancelar</a>
             <button type="submit" class="btn">Importar Perguntas Corrigidas</button>
         </div>
     </form>

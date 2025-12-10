@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios e Análises{% endblock %}
+
+{% block content %}
+
+<style>
+    .setor-header {
+        background-color: var(--cor-primaria);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 15px;
+        transition: background-color 0.2s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .setor-header:hover { background-color: #0e4b3a; }
+
+    .user-header {
+        background-color: #e9ecef;
+        color: #333;
+        padding: 12px 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+        margin-top: 10px;
+        border: 1px solid #dee2e6;
+        transition: background-color 0.2s;
+    }
+    .user-header:hover { background-color: #dbe2e8; }
+
+    .accordion-content { display: none; padding: 5px; animation: fadeIn 0.3s ease-in-out; }
+    .accordion-content.active { display: block; }
+    .icon-toggle { font-weight: bold; font-size: 18px; width: 24px; text-align: center; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+<div class="dashboard-container" style="max-width: 900px;">
+    <h1>Relatórios e Análises</h1>
+
+    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6; text-align: left;">
+        <form method="get" id="analytics-form">
+            <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
+                
+                <div style="flex: 1 1 200px;">
+                    <label for="usuario_id" style="font-weight: bold;">Colaborador:</label>
+                    <select name="usuario_id" style="width: 100%;">
+                        <option value="">-- Todos --</option>
+                        {% for usuario in usuarios_disponiveis %}
+                            <option value="{{ usuario.id }}" {% if usuario.id == usuario_selecionado_id %}selected{% endif %}>
+                                {{ usuario.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="flex: 1 1 200px;">
+                    <label for="departamento_id" style="font-weight: bold;">Setor:</label>
+                    <select name="departamento_id" style="width: 100%;">
+                        <option value="">-- Todos --</option>
+                        {% for depto in departamentos %}
+                            <option value="{{ depto.id }}" {% if depto.id == depto_selecionado_id %}selected{% endif %}>{{ depto.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div style="flex: 1 1 200px;">
+                    <label for="filtro_tipo" style="font-weight: bold;">Tipo:</label>
+                    <select name="filtro_tipo" style="width: 100%;">
+                        <option value="todos" {% if filtro_tipo == 'todos' or not filtro_tipo %}selected{% endif %}>-- Todos os Tipos --</option>
+                        <option value="multipla_escolha" {% if filtro_tipo == 'multipla_escolha' %}selected{% endif %}>Múltipla Escolha</option>
+                        <option value="verdadeiro_falso" {% if filtro_tipo == 'verdadeiro_falso' %}selected{% endif %}>Verdadeiro ou Falso</option>
+                        <option value="discursiva" {% if filtro_tipo == 'discursiva' %}selected{% endif %}>Discursiva</option>
+                    </select>
+                </div>
+
+                <div style="flex: 1 1 150px;">
+                    <label for="filtro_acertos" style="font-weight: bold;">Ver:</label>
+                    <select name="filtro_acertos" style="width: 100%;">
+                        <option value="erros" {% if filtro_acertos == 'erros' %}selected{% endif %}>Apenas Erros</option>
+                        <option value="acertos" {% if filtro_acertos == 'acertos' %}selected{% endif %}>Apenas Acertos</option>
+                        <option value="todos" {% if filtro_acertos == 'todos' %}selected{% endif %}>Todos (Acertos + Erros)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <button type="submit" formaction="{{ url_for('admin.pagina_analytics') }}" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar</button>
+                    <a href="{{ url_for('admin.pagina_analytics') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
+                </div>
+            </div>
+            
+            <hr style="margin: 20px 0;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <strong style="font-size: 14px;">Relatório Completo (Excel):</strong>
+                <button type="submit" formaction="{{ url_for('admin.exportar_respostas_detalhado') }}" class="btn" style="background-color: #1a6a43;">
+                    Baixar
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <h2>Percentual de Erros por Pergunta</h2>
+    <div class="ranking-container" style="max-width: 900px; max-height: 300px; overflow-y: auto; margin-bottom: 40px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Pergunta</th>
+                    <th>Total</th>
+                    <th>Incorretas</th>
+                    <th>% Erro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in stats_perguntas %}
+                <tr>
+                    <td style="white-space: normal; text-align: left;">{{ stat.texto }}</td>
+                    <td style="text-align: center;">{{ stat.total }}</td>
+                    <td style="text-align: center;">{{ stat.erros }}</td>
+                    <td style="text-align: center;">
+                        <strong style="color: {% if stat.percentual > 50 %}#dc3545{% elif stat.percentual > 25 %}#ffc107{% else %}#28a745{% endif %};">
+                            {{ "%.1f"|format(stat.percentual) }}%
+                        </strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align: center;">Nenhum dado encontrado com os filtros atuais.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <hr style="margin: 40px 0;">
+
+    <h2>Análise Detalhada 
+        {% if filtro_acertos == 'todos' %}(Geral)
+        {% elif filtro_acertos == 'acertos' %}(Acertos)
+        {% else %}(Erros){% endif %}
+    </h2>
+    
+    <div class="ranking-container" style="max-width: 900px; text-align: left; background: none; box-shadow: none; padding: 0;">
+        {% for setor, usuarios in dados_agrupados.items() %}
+            {% set loop_setor = loop %}
+            
+            <div class="setor-header" onclick="toggleAccordion('setor-{{ loop_setor.index }}')">
+                <span>📂 <strong>{{ setor }}</strong></span>
+                <span id="icon-setor-{{ loop_setor.index }}" class="icon-toggle">+</span>
+            </div>
+
+            <div id="setor-{{ loop_setor.index }}" class="accordion-content">
+                <div style="background-color: white; border: 1px solid #ddd; border-top: none; padding: 15px; border-radius: 0 0 8px 8px;">
+                    {% for usuario, respostas in usuarios.items() %}
+                        {% set unique_id = "user-" ~ loop_setor.index ~ "-" ~ loop.index %}
+                        <div class="user-header" onclick="toggleAccordion('{{ unique_id }}')">
+                            <span>👤 {{ usuario }} <small style="color: #666;">({{ respostas|length }} itens)</small></span>
+                            <span id="icon-{{ unique_id }}" class="icon-toggle">+</span>
+                        </div>
+                        <div id="{{ unique_id }}" class="accordion-content">
+                            <div style="border: 1px solid #eee; border-radius: 6px; overflow: hidden;">
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="background-color: #f8f9fa;">
+                                            <th style="padding: 10px; border-bottom: 2px solid #ddd; font-size: 14px;">Pergunta</th>
+                                            <th style="padding: 10px; border-bottom: 2px solid #ddd; font-size: 14px; width: 120px;">Sua Resposta</th>
+                                            <th style="padding: 10px; border-bottom: 2px solid #ddd; font-size: 14px; width: 120px;">Correta</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for resposta in respostas %}
+                                        <tr>
+                                            <td style="white-space: normal; padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; color: #333;">
+                                                {{ resposta.pergunta_texto }}
+                                                <div style="font-size: 11px; color: #999; margin-top: 4px;">Data: {{ resposta.data_liberacao }}</div>
+                                            </td>
+                                            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; vertical-align: top; background-color: {% if resposta.resposta_correta == resposta.resposta_dada or resposta.status_correcao == 'correto' %}#d4edda{% else %}#f8d7da{% endif %};">
+                                                <b style="color: {% if resposta.resposta_correta == resposta.resposta_dada or resposta.status_correcao == 'correto' %}#155724{% else %}#721c24{% endif %};">
+                                                    {{ resposta.resposta_dada.upper() if resposta.resposta_dada else '' }}
+                                                </b>
+                                                {% if resposta.texto_resposta_dada %}
+                                                <br><span style="font-size: 11px; color: #555;">{{ resposta.texto_resposta_dada[:50] }}...</span>
+                                                {% endif %}
+                                            </td>
+                                            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center; vertical-align: top;">
+                                                <b>{{ resposta.resposta_correta.upper() if resposta.resposta_correta else '' }}</b>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        {% else %}
+            <div style="background-color: white; padding: 40px; text-align: center; border-radius: 8px; border: 1px solid #dee2e6;">
+                <h3 style="color: #6c757d;">Nada aqui...</h3>
+                <p>Nenhum resultado encontrado nesta página com os filtros atuais.</p>
+            </div>
+        {% endfor %}
+
+        {% if respostas_pagination.pages > 1 %}
+        <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
+            {% if respostas_pagination.has_prev %}
+                <a href="{{ url_for('admin.pagina_analytics', page=respostas_pagination.prev_num, usuario_id=usuario_selecionado_id, departamento_id=depto_selecionado_id, filtro_acertos=filtro_acertos, filtro_tipo=filtro_tipo) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">&laquo; Anterior</a>
+            {% endif %}
+            <span style="font-weight: bold; color: #555;">Página {{ respostas_pagination.page }} de {{ respostas_pagination.pages }}</span>
+            {% if respostas_pagination.has_next %}
+                <a href="{{ url_for('admin.pagina_analytics', page=respostas_pagination.next_num, usuario_id=usuario_selecionado_id, departamento_id=depto_selecionado_id, filtro_acertos=filtro_acertos, filtro_tipo=filtro_tipo) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">Próximo &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <p style="margin-top: 20px; text-align: center;"><a href="{{ url_for('admin.pagina_admin') }}">Voltar para o Admin</a></p>
+</div>
+
+<script>
+    function toggleAccordion(id) {
+        const content = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        
+        if (content.classList.contains('active')) {
+            content.classList.remove('active');
+            if(icon) icon.textContent = '+';
+        } else {
+            content.classList.add('active');
+            if(icon) icon.textContent = '−';
+        }
+    }
+</script>
+
+{% endblock %}

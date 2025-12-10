@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<div class="dashboard-container" style="max-width: 1100px;">
+    <h1>Área do Administrador
+        <button class="open-help-modal help-button"
+            data-help-text="Esta é a área de gerenciamento. Use as seções abaixo para:
+            
+            • Gerenciar Setores: Crie ou exclua os setores da empresa.
+            • Gerenciar Usuários: Adicione, edite ou exclua colaboradores.
+            • Gerenciar Admins: Adicione outros administradores.">?</button>
+    </h1>
+
+    {% if contagem_pendentes > 0 %}
+    <a href="{{ url_for('admin.pagina_correcoes') }}" style="text-decoration: none;">
+        <div class="alert" style="background-color: #fff3cd; color: #856404; border-color: #ffeeba; cursor: pointer;">
+            <strong>Atenção:</strong> Você tem <strong>{{ contagem_pendentes }}</strong> atividade(s) discursiva(s)
+            pendente(s) de avaliação. Clique aqui para corrigir.
+        </div>
+    </a>
+    {% endif %}
+
+    {% if not senha_correta %}
+    <div class="login-container" style="max-width: 400px; margin: 50px auto;">
+        <h2>Login Administrativo</h2>
+        <form method="post">
+            <label>E-mail:</label>
+            <input type="email" name="email" required autofocus placeholder="admin@empresa.com">
+            
+            <label>Senha:</label>
+            <input type="password" name="senha" required autocomplete="current-password">
+            
+            <button type="submit" class="btn" style="width: 100%; margin: 20px 0 0 0;">Entrar</button>
+        </form>
+    </div>
+    {% else %}
+
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('admin.pagina_relatorios') }}" class="btn btn-secondary" style="background-color: #6dd4e2">Gerar Relatórios</a>
+        <a href="{{ url_for('admin.pagina_correcoes') }}" class="btn" style="background-color: #ffc107; color: #333;">Avaliar Atividades</a>
+        <a href="{{ url_for('admin.pagina_analytics') }}" class="btn btn-secondary" style="background-color: #d68686"> Ver Relatórios de Erros</a>
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary" style="background-color: #6c757d;">Sair da Área do Admin</a>
+    </div>
+
+    <a href="{{ url_for('admin.pagina_admin_perguntas') }}" class="accordion-trigger" style="display: block; text-decoration: none; color: inherit; margin-top: 20px; text-align: left; position: relative;">
+        Gerenciar Perguntas ➡️
+    </a>
+
+    <button class="accordion-trigger" id="accordion-setores">Gerenciar Setores</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Adicionar Novo Setor</h3>
+                    <form action="{{ url_for('admin.adicionar_setor') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label for="nome">Nome do Setor:</label><br>
+                        <input type="text" name="nome" style="width: 100%;" required><br><br>
+                        <button type="submit" class="btn">Salvar Setor</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 400px;">
+                    <h3>Setores Cadastrados</h3>
+                    <div class="ranking-container" style="max-height: 250px; overflow-y: auto;">
+                        <table>
+                            <thead><tr><th>Nome</th><th>Ações</th></tr></thead>
+                            <tbody>
+                                {% for depto in departamentos %}
+                                <tr>
+                                    <td>{{ depto.nome }}</td>
+                                    <td>
+                                        <form action="{{ url_for('admin.excluir_setor', departamento_id=depto.id) }}" method="post" onsubmit="return confirm('Atenção: Só é possível excluir um setor que não tenha NENHUM usuário. Deseja tentar?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="accordion-trigger" id="accordion-usuarios">Gerenciar Usuários</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Adicionar Novo Usuário</h3>
+                    <form action="{{ url_for('admin.adicionar_usuario') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label for="nome">Nome do Colaborador:</label><br>
+                        <input type="text" name="nome" style="width: 100%;" required><br><br>
+                        <label for="email">E-mail (Opcional):</label><br>
+                        <input type="email" name="email" style="width: 100%;"><br><br>
+                        <label for="codigo_acesso">Código de Acesso (4 dígitos):</label><br>
+                        <input type="text" name="codigo_acesso" maxlength="4" style="width: 100%;" required><br><br>
+                        <label for="departamento_id">Setor:</label><br>
+                        <select name="departamento_id" style="width: 100%;" required>
+                            {% for depto in departamentos %}
+                            <option value="{{ depto.id }}">{{ depto.nome }}</option>
+                            {% endfor %}
+                        </select><br><br>
+                        <button type="submit" class="btn">Salvar Usuário</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 500px;">
+                    <h3>Usuários Cadastrados</h3>
+                    <div class="ranking-container" style="max-height: 400px; overflow-y: auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th>Setor</th>
+                                    <th style="text-align: center;">Código</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for usuario in usuarios %}
+                                <tr>
+                                    <td>{{ usuario.nome }}</td>
+                                    <td>{{ usuario.email or '' }}</td>
+                                    <td>{{ usuario.departamento.nome }}</td>
+                                    <td style="text-align: center; font-weight: bold;">{{ usuario.codigo_acesso }}</td>
+                                    <td style="display: flex; gap: 5px;">
+                                        <a href="{{ url_for('admin.editar_usuario', usuario_id=usuario.id) }}" style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">Editar</a>
+                                        <form action="{{ url_for('admin.excluir_usuario', usuario_id=usuario.id) }}" method="post" onsubmit="return confirm('Tem certeza que deseja excluir {{ usuario.nome }}?');">
+                                            <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="accordion-trigger" id="accordion-admins">Gerenciar Administradores</button>
+    <div class="accordion-panel">
+        <div style="padding: 20px 0;">
+            <div style="display: flex; justify-content: space-around; align-items: flex-start; flex-wrap: wrap; gap: 40px;">
+                <div style="flex: 1; min-width: 300px;">
+                    <h3>Novo Administrador</h3>
+                    <form action="{{ url_for('admin.adicionar_admin') }}" method="post" style="text-align: left; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
+                        <label>Nome:</label>
+                        <input type="text" name="nome" required style="width: 100%;">
+                        <label>E-mail:</label>
+                        <input type="email" name="email" required style="width: 100%;">
+                        <label>Senha:</label>
+                        <input type="password" name="senha" required style="width: 100%;">
+                        <button type="submit" class="btn">Cadastrar Admin</button>
+                    </form>
+                </div>
+                <div style="flex: 2; min-width: 400px;">
+                    <h3>Administradores</h3>
+                    <div class="ranking-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for admin in admins %}
+                                <tr>
+                                    <td>{{ admin.nome }}</td>
+                                    <td>{{ admin.email }}</td>
+                                    <td style="display: flex; gap: 5px;">
+                                        <a href="{{ url_for('admin.editar_admin', admin_id=admin.id) }}"
+                                            style="background-color: #ffc107; color: black; padding: 5px 10px; border-radius: 4px; font-size: 14px; text-decoration: none;">
+                                            Editar
+                                        </a>
+                
+                                        {% if admin.id != session['admin_id'] %}
+                                        <form action="{{ url_for('admin.excluir_admin', admin_id=admin.id) }}" method="post"
+                                            onsubmit="return confirm('Tem certeza que deseja excluir o administrador {{ admin.nome }}?');"
+                                            style="margin: 0;">
+                                            <button type="submit"
+                                                style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                                                Excluir
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span style="color: #999; font-size: 12px; align-self: center; margin-left: 5px;">(Você)</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }} 
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const accordions = document.querySelectorAll(".accordion-trigger");
+            const activeAccordionId = sessionStorage.getItem('activeAccordionId');
+            
+            accordions.forEach(accordion => {
+                // Se for o link de perguntas, ignora a lógica de abrir/fechar painel
+                if (accordion.tagName === 'A') return;
+
+                function openPanel(acc) {
+                    acc.classList.add("active");
+                    const panel = acc.nextElementSibling;
+                    panel.style.maxHeight = panel.scrollHeight + "px";
+                    sessionStorage.setItem('activeAccordionId', acc.id);
+                }
+                function closeAllPanels() {
+                    accordions.forEach(acc => {
+                        if (acc.tagName === 'A') return; // Ignora o link
+                        acc.classList.remove("active");
+                        acc.nextElementSibling.style.maxHeight = null;
+                    });
+                    sessionStorage.removeItem('activeAccordionId');
+                }
+                accordion.addEventListener("click", function() {
+                    const isAlreadyActive = this.classList.contains("active");
+                    closeAllPanels();
+                    if (!isAlreadyActive) {
+                        openPanel(this);
+                    }
+                });
+                if (activeAccordionId && accordion.id === activeAccordionId) {
+                    setTimeout(() => {
+                        openPanel(accordion);
+                    }, 100);
+                }
+            });
+        });
+    </script>
+{% endblock %}

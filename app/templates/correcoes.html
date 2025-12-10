@@ -8,7 +8,7 @@
     <p style="text-align: center;">Revise as respostas enviadas pelos usuários e deixe um feedback.</p>
 
     <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6;">
-        <form method="get" action="{{ url_for('pagina_correcoes') }}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <form method="get" action="{{ url_for('admin.pagina_correcoes') }}" style="display: flex; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div style="flex: 1 1 300px;">
                 <label for="usuario_id" style="font-weight: bold;">Filtrar por Colaborador:</label>
                 <select name="usuario_id" onchange="this.form.submit()" style="width: 100%;">
@@ -32,7 +32,7 @@
             </div>
             <div style="align-self: flex-end;">
                 <button type="submit" class="btn" style="padding: 10px 15px; margin: 0;">Filtrar</button>
-                <a href="{{ url_for('pagina_correcoes') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
+                <a href="{{ url_for('admin.pagina_correcoes') }}" class="btn btn-secondary" style="padding: 10px 15px; margin: 0;">Limpar</a>
             </div>
         </form>
     </div>
@@ -97,7 +97,7 @@
         {% endif %}
 
         {% if resposta.status_correcao == 'pendente' %}
-        <form action="{{ url_for('corrigir_resposta', resposta_id=resposta.id) }}" method="post">
+        <form action="{{ url_for('admin.corrigir_resposta', resposta_id=resposta.id) }}" method="post">
             <div style="margin-top: 20px;">
                 <label for="feedback"><strong>Seu Feedback (Opcional):</strong></label><br>
                 <textarea name="feedback" rows="3" style="width: 100%; box-sizing: border-box;"></textarea>
@@ -132,7 +132,7 @@
     <div style="margin-top: 30px; text-align: center; display: flex; justify-content: center; gap: 15px; align-items: center;">
         
         {% if respostas.has_prev %}
-            <a href="{{ url_for('pagina_correcoes', page=respostas.prev_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+            <a href="{{ url_for('admin.pagina_correcoes', page=respostas.prev_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
                 &laquo; Anterior
             </a>
         {% endif %}
@@ -142,7 +142,7 @@
         </span>
 
         {% if respostas.has_next %}
-            <a href="{{ url_for('pagina_correcoes', page=respostas.next_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
+            <a href="{{ url_for('admin.pagina_correcoes', page=respostas.next_num, usuario_id=usuario_selecionado_id, status=status_selecionado) }}" class="btn btn-secondary" style="padding: 8px 20px; font-size: 14px;">
                 Próximo &raquo;
             </a>
         {% endif %}
@@ -151,7 +151,7 @@
     {% endif %}
 
     <div style="text-align: center; margin-top: 20px;">
-        <a href="{{ url_for('pagina_admin') }}" class="btn btn-secondary">Voltar para o Admin</a>
+        <a href="{{ url_for('admin.pagina_admin') }}" class="btn btn-secondary">Voltar para o Admin</a>
     </div>
 </div>
 {% endblock %}
