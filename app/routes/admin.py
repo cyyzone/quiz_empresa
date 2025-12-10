@@ -4,11 +4,13 @@ from app.extensions import db
 from app.utils import validar_linha, allowed_file, _gerar_dados_relatorio, get_texto_da_opcao
 from sqlalchemy import or_, func, case, desc, extract
 from sqlalchemy.orm import joinedload
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 import pandas as pd
 import io
 import cloudinary.uploader
+from app.utils import enviar_notificacao_nova_pergunta
+from app.models import Usuario
 
 # Cria o Blueprint com o prefixo '/admin'
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -334,7 +336,63 @@ def adicionar_pergunta():
         nova_pergunta.opcao_d = None
 
     db.session.commit()
-    flash('Pergunta adicionada com sucesso!', 'success')
+
+    # --- INÍCIO DA LÓGICA DE NOTIFICAÇÃO ---
+#    try:
+ #       usuarios_alvo = []
+        
+  #      if nova_pergunta.para_todos_setores:
+ #           # Se for para todos, pega todos os usuários que têm e-mail
+   #         usuarios_alvo = Usuario.query.filter(Usuario.email != None).all()
+  #      else:
+            # Se for para setores específicos, faz um JOIN para achar os usuários desses setores
+            # Filtrando apenas pelos departamentos vinculados à pergunta recém-criada
+ #           usuarios_alvo = Usuario.query.join(Departamento).filter(
+  #              Departamento.perguntas.any(id=nova_pergunta.id),
+   #             Usuario.email != None
+  #          ).all()
+
+        # Chama a função que dispara os e-mails em segundo plano (Thread)
+#        enviar_notificacao_nova_pergunta(usuarios_alvo, nova_pergunta.texto)
+        
+  #      flash('Pergunta adicionada e notificação enviada com sucesso!', 'success')
+
+  #  except Exception as e:
+  #      # Se der erro no e-mail, não queremos que pareça que a pergunta não foi salva
+   #     flash(f'Pergunta salva, mas ocorreu um erro ao enviar as notificações: {e}', 'warning')
+    # --- FIM DA LÓGICA DE NOTIFICAÇÃO ---
+   # flash('Pergunta adicionada com sucesso!', 'success') 
+    
+    return redirect(url_for('admin.pagina_admin_perguntas'))
+# Em app/routes/admin.py
+
+@admin_bp.route('/notificar_lote', methods=['POST'])
+def notificar_lote():
+    if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
+    
+    # 1. Busca perguntas liberadas HOJE
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
+    perguntas_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
+    
+    if not perguntas_hoje:
+        flash('Nenhuma pergunta encontrada com a data de hoje para notificar.', 'warning')
+        return redirect(url_for('admin.pagina_admin_perguntas'))
+
+    # 2. Busca usuários
+    usuarios = Usuario.query.filter(Usuario.email != None).all()
+    
+    # 3. Dispara o envio
+    from app.utils import enviar_email_resumo_do_dia
+    
+    # GERA O LINK AQUI (Enquanto ainda estamos na requisição ativa)
+    link_acesso = url_for('auth.pagina_login', _external=True)
+    
+    titulos_perguntas = [p.texto for p in perguntas_hoje]
+    
+    # Passa o link_acesso para a função
+    enviar_email_resumo_do_dia(usuarios, titulos_perguntas, link_acesso)
+    
+    flash(f'Processo de notificação iniciado para {len(perguntas_hoje)} perguntas de hoje!', 'success')
     return redirect(url_for('admin.pagina_admin_perguntas'))
 
 @admin_bp.route('/edit_question/<int:pergunta_id>', methods=['POST'])
@@ -644,7 +702,7 @@ def exportar_respostas_detalhado():
         dados_para_planilha.append({
             'Colaborador': r.usuario.nome,
             'Setor': r.usuario.departamento.nome,
-            'Data da Resposta': r.data_resposta.strftime('%d/%m/%Y %H:%M'),
+            'Data da Resposta': (r.data_resposta - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M'),
             'Pergunta': r.pergunta.texto,
             'Tipo de Pergunta': r.pergunta.tipo,
             'Resposta Dada': resposta_dada,

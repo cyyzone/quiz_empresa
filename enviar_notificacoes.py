@@ -1,52 +1,54 @@
-# Em enviar_notificacoes.py
+from run import app
+from app.models import Usuario, Pergunta, Resposta, Departamento
+from app.utils import disparar_lembretes_pendencias # Importa a nova função divertida
+from app.extensions import db
+from sqlalchemy import or_
+from datetime import datetime, timedelta
 
-from app import app, db, mail, Usuario, Pergunta
-from flask_mail import Message
-from datetime import date
+# --- CONFIGURAÇÃO ---
+LINK_DO_SITE = "https://quiz-empresa.onrender.com"
 
-def enviar_email_notificacao():
-    # 'with app.app_context()' é crucial para permitir que o script acesse o banco de dados
+def verificar_e_lembrar_pendencias():
     with app.app_context():
-        print("Iniciando verificação de novas perguntas...")
+        print("--- 🕵️ Iniciando Caça às Pendências ---")
         
-        # 1. Encontra as perguntas liberadas hoje
-        hoje = date.today()
-        perguntas_de_hoje = Pergunta.query.filter_by(data_liberacao=hoje).all()
+        # 1. Data de Hoje (UTC-3)
+        hoje = (datetime.utcnow() - timedelta(hours=3)).date()
         
-        if not perguntas_de_hoje:
-            print("Nenhuma pergunta nova para hoje. Encerrando.")
-            return
-
-        print(f"Encontradas {len(perguntas_de_hoje)} perguntas novas. Buscando usuários...")
+        # 2. Busca todos os usuários com e-mail
+        usuarios = Usuario.query.filter(Usuario.email != None).all()
         
-        # 2. Busca todos os usuários que têm um e-mail cadastrado
-        usuarios = Usuario.query.filter(Usuario.email.isnot(None)).all()
+        lista_devedores = []
         
-        if not usuarios:
-            print("Nenhum usuário com e-mail cadastrado. Encerrando.")
-            return
+        print(f"Analisando {len(usuarios)} usuários...")
 
-        # 3. Envia um e-mail para cada usuário
-        # Usamos 'with mail.connect()' para otimizar o envio de múltiplos e-mails
-        with mail.connect() as conn:
-            for usuario in usuarios:
-                try:
-                    subject = "Novas perguntas disponíveis no Quiz Produtivo!"
-                    body = (
-                        f"Olá, {usuario.nome}!\n\n"
-                        f"Temos novas perguntas de conhecimento liberadas hoje para você responder.\n\n"
-                        f"Acesse agora e teste seus conhecimentos!\n\n"
-                        f"Atenciosamente,\nEquipe Quiz Produtivo"
-                    )
-                    
-                    msg = Message(subject=subject, recipients=[usuario.email], body=body)
-                    conn.send(msg)
-                    print(f"E-mail enviado com sucesso para {usuario.email}")
-                except Exception as e:
-                    print(f"Falha ao enviar e-mail para {usuario.email}: {e}")
+        for usuario in usuarios:
+            # A) Quais perguntas este usuário JÁ respondeu?
+            # sq_respondidas = lista de IDs
+            respondidas_ids = [r.pergunta_id for r in Resposta.query.filter_by(usuario_id=usuario.id).all()]
+            
+            # B) Quantas perguntas DISPONÍVEIS (até hoje) ele NÃO respondeu?
+            # Filtra por data, exclui as respondidas e verifica o setor
+            pendencias_count = Pergunta.query.filter(
+                Pergunta.data_liberacao <= hoje,           # Já liberada
+                ~Pergunta.id.in_(respondidas_ids),         # Não respondida
+                or_(
+                    Pergunta.para_todos_setores == True,   # Para todos
+                    Pergunta.departamentos.any(id=usuario.departamento_id) # Ou do setor dele
+                )
+            ).count()
+            
+            if pendencias_count > 0:
+                print(f"-> {usuario.nome} tem {pendencias_count} pendências.")
+                lista_devedores.append((usuario, pendencias_count))
+        
+        # 3. Envia os e-mails se houver alguém com pendência
+        if lista_devedores:
+            print(f"Enviando e-mails para {len(lista_devedores)} usuários atrasados...")
+            disparar_lembretes_pendencias(lista_devedores, LINK_DO_SITE)
+            print("Disparos iniciados com sucesso! (O envio ocorre em segundo plano)")
+        else:
+            print("🎉 Ninguém tem pendências! Tudo em dia.")
 
-        print("Processo de notificação concluído.")
-
-# Permite que o script seja executado diretamente pelo terminal
 if __name__ == '__main__':
-    enviar_email_notificacao()
+    verificar_e_lembrar_pendencias()

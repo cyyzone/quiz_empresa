@@ -1,4 +1,6 @@
-from app import app, db, Administrador
+from run import app           # Importa a app criada no run.py
+from app.extensions import db # Importa o db das extensões
+from app.models import Administrador # Importa o modelo do ficheiro correto
 
 with app.app_context():
     # 1. Cria a tabela no banco (se não existir)

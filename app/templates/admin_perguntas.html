@@ -9,7 +9,7 @@
     </div>
 
     <h1>Gerenciar Perguntas</h1>
-
+    
     <div style="text-align: left; max-width: 800px; margin: 20px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
         <h3>Importar Perguntas (Planilha)</h3>
         <p style="font-size: 14px; margin-bottom: 20px;">
@@ -34,7 +34,15 @@
     </div>
     
     <hr>
-    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="margin: 0;">Gerenciar Perguntas</h1>
+        
+        <form action="{{ url_for('admin.notificar_lote') }}" method="post" onsubmit="return confirm('Tem certeza? Isso enviará um e-mail para TODOS os usuários avisando sobre as perguntas de HOJE.');">
+            <button type="submit" class="btn" style="background-color: #17a2b8; border: none; font-size: 16px;">
+                📧 Notificar Perguntas de Hoje
+            </button>
+        </form>
+    </div>
     <form action="{{ url_for('admin.adicionar_pergunta') }}" method="post" enctype="multipart/form-data" style="text-align: left; max-width: 800px; margin: 40px auto; background-color: #f9f9f9; padding: 20px; border-radius: 8px;">
         <h3>Cadastrar Nova Pergunta</h3>
         

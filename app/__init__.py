@@ -2,6 +2,7 @@ from flask import Flask, render_template
 from .extensions import db
 from .utils import format_datetime_local, otimizar_img_filter, get_texto_da_opcao
 import cloudinary
+from .extensions import db, mail
 
 def create_app():
     app = Flask(__name__)
@@ -10,6 +11,7 @@ def create_app():
 
     # Inicializa BD
     db.init_app(app)
+    mail.init_app(app)
 
     # Configura Cloudinary
     cloudinary.config(

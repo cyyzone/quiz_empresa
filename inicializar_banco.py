@@ -1,9 +1,10 @@
-from app import app, db, Usuario, Departamento
+from run import app                   # Importa a app criada no run.py
+from app.extensions import db         # Importa o db das extensões
+from app.models import Usuario, Departamento # Importa os modelos do ficheiro correto
 
 # ESTRUTURA DOS SETORES E USUÁRIOS
 dados_iniciais = {
     "Suporte": [
-        # MUDANÇA: Adicionado o campo 'email' para cada usuário
         {'nome': 'Jenyffer', 'codigo_acesso': '1234', 'email': 'jenycds8@gmail.com'},
         {'nome': 'Bruno Costa', 'codigo_acesso': '5678', 'email': 'bruno.costa@empresa.com'},
     ],
@@ -36,12 +37,11 @@ with app.app_context():
             novo_usuario = Usuario(
                 nome=user_data['nome'], 
                 codigo_acesso=user_data['codigo_acesso'],
-                email=user_data['email'], # Adicionamos o e-mail aqui
+                email=user_data['email'],
                 departamento=novo_depto
             )
             db.session.add(novo_usuario)
     
     db.session.commit()
     print("Dados iniciais inseridos com sucesso!")
-
     print("Banco de dados pronto!")

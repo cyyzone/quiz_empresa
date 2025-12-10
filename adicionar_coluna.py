@@ -1,4 +1,5 @@
-from app import app, db
+from run import app 
+from app.extensions import db 
 from sqlalchemy import text
 
 # Script para adicionar a coluna 'explicacao' sem resetar o banco

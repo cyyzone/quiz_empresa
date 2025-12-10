@@ -1,8 +1,121 @@
-from flask import current_app
+from flask_mail import Message
+from flask import current_app, url_for
+from .extensions import mail
+from threading import Thread
 from datetime import datetime, timedelta
 from .models import Usuario, Departamento, Resposta
 from .extensions import db
 from sqlalchemy import func, case, or_
+
+def enviar_emails_em_lote(app, usuarios, pergunta_texto, link_acesso):
+    """
+    Função que roda em segundo plano.
+    Recebe o 'link_acesso' já pronto para não precisar de usar url_for aqui.
+    """
+    with app.app_context():
+        with mail.connect() as conn:
+            for usuario in usuarios:
+                if not usuario.email:
+                    continue
+                
+                try:
+                    # Tratamento do Assunto
+                    assunto_curto = (pergunta_texto[:50] + '...') if len(pergunta_texto) > 50 else pergunta_texto
+
+                    msg = Message(
+                        subject=f"Nova Pergunta: {assunto_curto}",
+                        recipients=[usuario.email]
+                    )
+                    
+                    msg.body = f"""
+                    Olá, {usuario.nome}!
+                    
+                    Uma nova pergunta acabou de ser liberada no Quiz:
+                    
+                    "{pergunta_texto}"
+                    
+                    Entre agora para responder e garantir seus pontos!
+                    Link: {link_acesso}
+                    
+                    Atenciosamente,
+                    Equipe de Treinamento
+                    """
+                    
+                    conn.send(msg)
+                    print(f"Notificação enviada para: {usuario.nome}")
+                    
+                except Exception as e:
+                    print(f"Falha ao enviar para {usuario.nome}: {e}")
+
+def enviar_notificacao_nova_pergunta(usuarios, pergunta_texto):
+    """
+    Função chamada pela rota. Gera o link e inicia a Thread.
+    """
+    app = current_app._get_current_object()
+    
+    # CORREÇÃO: Geramos o link AQUI, onde ainda temos o contexto da requisição
+    link_acesso = url_for('auth.pagina_login', _external=True)
+    
+    # Passamos o link pronto como argumento para a thread
+    Thread(target=enviar_emails_em_lote, args=(app, usuarios, pergunta_texto, link_acesso)).start()
+
+
+def enviar_emails_resumo_thread(app, usuarios, titulos, link_acesso):
+    with app.app_context():
+        with mail.connect() as conn:
+            for usuario in usuarios:
+                try:
+                    qtd = len(titulos)
+                    msg = Message(
+                        subject=f"Temos {qtd} Novas Perguntas no Quiz!",
+                        recipients=[usuario.email]
+                    )
+                    
+                    # Cria a lista em formato HTML (com quebras de linha <br>)
+                    lista_txt = "<br>".join([f"• {t[:60]}..." for t in titulos])
+                    
+                    # URL do GIF (Você pode trocar por qualquer link da internet)
+                    # Exemplo: Um sino tocando ou um foguete
+                    url_gif = "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif" 
+
+                    # Define o corpo em HTML para suportar imagens/gifs
+                    msg.html = f"""
+                    <div style="font-family: Arial, sans-serif; color: #333;">
+                        <h2>Olá, {usuario.nome}! 👋</h2>
+                        
+                        <p>Temos novidades! Hoje foram liberadas <strong>{qtd} novas perguntas</strong> para você testar seus conhecimentos:</p>
+                        
+                        <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #17a2b8; margin: 20px 0;">
+                            {lista_txt}
+                        </div>
+
+                        <div style="text-align: center; margin: 20px 0;">
+                            <img src="{url_gif}" alt="Novidade" width="300" style="border-radius: 8px;">
+                        </div>
+
+                        <p>Acesse agora e garanta sua pontuação:</p>
+                        
+                        <a href="{link_acesso}" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                            🚀 Responder Agora
+                        </a>
+                        
+                        <br><br>
+                        <p style="font-size: 12px; color: #999;">Boa sorte!<br>Equipe de Treinamento</p>
+                    </div>
+                    """
+                    
+                    # Mantemos o body (texto puro) como backup para e-mails antigos que não abrem HTML
+                    msg.body = f"Olá {usuario.nome}, temos {qtd} novas perguntas! Acesse: {link_acesso}"
+
+                    conn.send(msg)
+                except Exception as e:
+                    print(f"Erro ao enviar para {usuario.nome}: {e}")
+
+# 2. E atualize esta também para aceitar 'link_acesso' e passá-lo para a thread
+def enviar_email_resumo_do_dia(usuarios, titulos_perguntas, link_acesso): 
+    app = current_app._get_current_object()
+    # Adicionamos o link_acesso na lista de argumentos (args)
+    Thread(target=enviar_emails_resumo_thread, args=(app, usuarios, titulos_perguntas, link_acesso)).start()
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -87,3 +200,67 @@ def _gerar_dados_relatorio(departamento_id=None):
             'pontuacao_total': resultado.pontuacao_total
         })
     return relatorios_finais
+
+def enviar_lembrete_pendencias_thread(app, dados_usuarios, link_acesso):
+    """
+    Envia e-mails de lembrete para usuários com pendências.
+    dados_usuarios: Lista de tuplas (usuario, qtd_pendente)
+    """
+    with app.app_context():
+        with mail.connect() as conn:
+            for usuario, qtd in dados_usuarios:
+                if not usuario.email:
+                    continue
+                
+                try:
+                    msg = Message(
+                        subject=f"⏳ Ops! Você tem {qtd} perguntas pendentes...",
+                        recipients=[usuario.email]
+                    )
+                    
+                    # GIF divertido de "Esperando" (Mr. Bean olhando o relógio)
+                    url_gif = "https://media.giphy.com/media/tXL4FHPSnVJ0A/giphy.gif"
+                    
+                    msg.html = f"""
+                    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #d63384;">Toc toc, {usuario.nome}! 👻</h2>
+                        
+                        <p>Notamos que você deixou passar algumas atividades...</p>
+                        
+                        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #ffeeba;">
+                            <span style="font-size: 40px; display: block; margin-bottom: 10px;">😱</span>
+                            <strong style="font-size: 18px; color: #856404;">
+                                Você tem {qtd} perguntas esperando sua resposta!
+                            </strong>
+                        </div>
+
+                        <div style="text-align: center; margin: 30px 0;">
+                            <img src="{url_gif}" alt="Esperando" width="100%" style="max-width: 350px; border-radius: 8px;">
+                            <p style="font-size: 12px; color: #888; margin-top: 5px;"><i>Nós esperando você responder para atualizar o Ranking...</i></p>
+                        </div>
+
+                        <p>Não deixe acumular! Responda rapidinho e garanta seus pontos:</p>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{link_acesso}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px;">
+                                🏃‍♂️ Correr para o Quiz
+                            </a>
+                        </div>
+                        
+                        <hr style="border: 0; border-top: 1px solid #eee;">
+                        <p style="font-size: 12px; color: #999; text-align: center;">Vamos lá! Você consegue!<br>Equipe de Treinamento</p>
+                    </div>
+                    """
+                    
+                    # Texto puro como backup
+                    msg.body = f"Oi {usuario.nome}! Você tem {qtd} perguntas pendentes. Acesse agora: {link_acesso}"
+
+                    conn.send(msg)
+                    print(f"Lembrete divertido enviado para: {usuario.nome}")
+                    
+                except Exception as e:
+                    print(f"Erro ao enviar para {usuario.nome}: {e}")
+
+def disparar_lembretes_pendencias(dados_usuarios, link_acesso):
+    app = current_app._get_current_object()
+    Thread(target=enviar_lembrete_pendencias_thread, args=(app, dados_usuarios, link_acesso)).start()

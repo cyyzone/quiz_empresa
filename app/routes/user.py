@@ -5,6 +5,7 @@ from app.utils import allowed_file
 from sqlalchemy import or_, func, desc
 from datetime import date
 import cloudinary.uploader
+from datetime import datetime, timedelta
 
 user_bp = Blueprint('user', __name__)
 
@@ -14,7 +15,7 @@ def dashboard():
 
     usuario_id = session['usuario_id']
     usuario = Usuario.query.get(usuario_id)
-    hoje = date.today()
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
     
     # OTIMIZAÇÃO: Subquery
     sq_respondidas = db.session.query(Resposta.pergunta_id).filter(Resposta.usuario_id == usuario_id).subquery()
@@ -51,7 +52,7 @@ def pagina_quiz():
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     usuario_id = session['usuario_id']
     usuario = Usuario.query.get(usuario_id)
-    hoje = date.today()
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
     
     sq_respondidas = db.session.query(Resposta.pergunta_id).filter(Resposta.usuario_id == usuario_id).subquery()
 
@@ -72,7 +73,7 @@ def pagina_quiz():
 def pagina_atividades():
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     
-    hoje = date.today()
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
     usuario_id = session['usuario_id']
     usuario = Usuario.query.get(usuario_id)
     page = request.args.get('page', 1, type=int)
