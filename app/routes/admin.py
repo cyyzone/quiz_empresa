@@ -261,13 +261,43 @@ def atualizar_usuario(usuario_id):
 @admin_bp.route('/delete_user/<int:usuario_id>', methods=['POST'])
 def excluir_usuario(usuario_id):
     if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
+    
     usuario = Usuario.query.get_or_404(usuario_id)
-    Resposta.query.filter_by(usuario_id=usuario_id).delete()
-    db.session.delete(usuario)
-    db.session.commit()
-    flash(f'Usuário "{usuario.nome}" e todas as suas respostas foram excluídos.', 'success')
-    return redirect(url_for('admin.pagina_admin'))
+    
+    try:
+        # 1. Buscar todas as respostas desse usuário
+        respostas = Resposta.query.filter_by(usuario_id=usuario_id).all()
+        
+        for resposta in respostas:
+            # 2. Para cada resposta, verifica se tem anexo e apaga-o primeiro
+            anexos = AnexoResposta.query.filter_by(resposta_id=resposta.id).all()
+            for anexo in anexos:
+                # Opcional: Tentar apagar do Cloudinary para não deixar lixo lá
+                try:
+                    # Extrai o ID público da URL (lógica simples)
+                    public_id = anexo.url.split('/')[-1].split('.')[0]
+                    cloudinary.uploader.destroy(public_id, resource_type="raw") 
+                except Exception as e:
+                    print(f"Erro ao apagar anexo do Cloudinary: {e}")
+                
+                # Apaga o registro do anexo no banco
+                db.session.delete(anexo)
+            
+            # 3. Agora que está sem anexos, podemos apagar a resposta
+            db.session.delete(resposta)
+            
+        # 4. Finalmente, apaga o usuário
+        db.session.delete(usuario)
+        db.session.commit()
+        
+        flash(f'Usuário "{usuario.nome}" e todos os seus dados foram excluídos.', 'success')
+        
+    except Exception as e:
+        db.session.rollback() # Cancela se der erro no meio
+        flash(f'Erro ao excluir usuário: {e}', 'danger')
 
+    return redirect(url_for('admin.pagina_admin'))
+    
 # --- CRUD: PERGUNTAS (REDIRECIONA PARA 'admin.pagina_admin_perguntas') ---
 @admin_bp.route('/edit_question/<int:pergunta_id>', methods=['GET'])
 def editar_pergunta(pergunta_id):
