@@ -1,41 +1,81 @@
 <!DOCTYPE html>
+
 <html lang="pt-br">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
     <title>{% block title %}{% endblock %} - Quiz Interno</title>
+
 </head>
+
 <body>
 
+
+
     <div class="alert-container">
+
         {% with messages = get_flashed_messages(with_categories=true) %}
+
         {% if messages %}
+
         {% for category, message in messages %}
+
         <div class="alert alert-{{ category }}">
+
             {{ message | safe }} <button class="close-alert-btn">&times;</button>
+
         </div>
+
         {% endfor %}
+
         {% endif %}
+
         {% endwith %}
+
     </div>
+
+
 
     <div style="display: flex; justify-content: center; align-items: flex-start; min-height: 90vh; padding-top: 20px; padding-bottom: 20px;">
+
         {% block content %}{% endblock %}
+
     </div>
 
+
+
     <div id="help-modal" class="modal-overlay" style="display: none;">
+
         <div class="modal-content">
+
             <button class="close-modal-btn">&times;</button>
+
             <div id="modal-text-content" style="white-space: pre-line;">
+
             </div>
+
         </div>
+
     </div>
+
+
 
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 
+
+
     {% block scripts %}
+
     {% endblock %}
 
+
+
 </body>
+
 </html>

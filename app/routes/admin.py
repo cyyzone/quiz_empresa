@@ -101,6 +101,9 @@ def pagina_admin_perguntas():
         Pergunta.id.desc()
     ).paginate(page=page, per_page=per_page, error_out=False)
 
+    categorias_existentes = db.session.query(Pergunta.categoria).distinct().all()
+    lista_categorias = [c[0] for c in categorias_existentes if c[0]]
+
     return render_template('admin_perguntas.html', 
                            perguntas=perguntas_pagination, 
                            departamentos=departamentos,
@@ -304,6 +307,8 @@ def editar_pergunta(pergunta_id):
     if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
     pergunta = Pergunta.query.get_or_404(pergunta_id)
     todos_departamentos = Departamento.query.order_by(Departamento.nome).all()
+    categorias_existentes = db.session.query(Pergunta.categoria).distinct().all()
+    lista_categorias = [c[0] for c in categorias_existentes if c[0]]
     return render_template('edit_question.html', pergunta=pergunta, todos_departamentos=todos_departamentos)
 
 @admin_bp.route('/add_question', methods=['POST'])
@@ -319,11 +324,13 @@ def adicionar_pergunta():
         flash('Data inválida.', 'danger')
         return redirect(url_for('admin.pagina_admin_perguntas'))
 
+    categoria_recebida = request.form.get('categoria', 'Geral') # Pega do form ou usa 'Geral'
     nova_pergunta = Pergunta(
         tipo=tipo,
         texto=request.form.get('texto'),
         explicacao=request.form.get('explicacao'),
-        data_liberacao=data_obj
+        data_liberacao=data_obj,
+        categoria=categoria_recebida
     )
 
     db.session.add(nova_pergunta)
@@ -432,6 +439,7 @@ def atualizar_pergunta(pergunta_id):
     
     pergunta.tipo = request.form.get('tipo')
     pergunta.texto = request.form.get('texto')
+    pergunta.categoria = request.form.get('categoria', 'Geral')
     pergunta.explicacao = request.form.get('explicacao')
     
     try:
@@ -846,3 +854,56 @@ def init_db(secret_key):
         return "<h1>Banco de dados reinicializado com sucesso!</h1>"
     except Exception as e:
         return f"<h1>Ocorreu um erro:</h1><p>{e}</p>", 500
+
+@admin_bp.route('/categorias', methods=['GET'])
+def gerenciar_categorias():
+    if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
+    
+    # Busca categorias e conta quantas perguntas existem em cada uma
+    # Ex: [('Vendas', 15), ('Sincronização', 3)]
+    categorias_stats = db.session.query(
+        Pergunta.categoria, 
+        func.count(Pergunta.id)
+    ).group_by(Pergunta.categoria).order_by(Pergunta.categoria).all()
+    
+    return render_template('admin_categorias.html', estatisticas=categorias_stats)
+
+@admin_bp.route('/categorias/renomear', methods=['POST'])
+def renomear_categoria():
+    if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
+    
+    nome_antigo = request.form.get('nome_antigo')
+    novo_nome = request.form.get('novo_nome')
+    
+    if nome_antigo and novo_nome:
+        # Atualiza TODAS as perguntas que tinham o nome antigo
+        perguntas = Pergunta.query.filter_by(categoria=nome_antigo).all()
+        for p in perguntas:
+            p.categoria = novo_nome
+        
+        db.session.commit()
+        flash(f'Categoria "{nome_antigo}" renomeada para "{novo_nome}" em {len(perguntas)} perguntas.', 'success')
+    
+    return redirect(url_for('admin.gerenciar_categorias'))
+
+@admin_bp.route('/categorias/excluir', methods=['POST'])
+def excluir_categoria():
+    if not session.get('admin_logged_in'): return redirect(url_for('admin.pagina_admin'))
+    
+    nome_categoria = request.form.get('nome_categoria')
+    
+    if nome_categoria:
+        # Busca todas as perguntas dessa categoria
+        perguntas = Pergunta.query.filter_by(categoria=nome_categoria).all()
+        qtd = len(perguntas)
+        
+        # EM VEZ DE DELETAR, A GENTE MOVE PARA 'Geral'
+        for p in perguntas:
+            p.categoria = 'Geral' 
+            
+        db.session.commit()
+        
+        # A categoria antiga some porque ninguém mais usa ela
+        flash(f'Categoria "{nome_categoria}" removida! As {qtd} perguntas foram movidas para "Geral".', 'success')
+    
+    return redirect(url_for('admin.gerenciar_categorias'))

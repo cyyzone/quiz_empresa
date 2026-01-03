@@ -95,6 +95,22 @@
         <label for="data_liberacao">Data de Liberação:</label><br>
         <input type="date" name="data_liberacao" value="{{ pergunta.data_liberacao.strftime('%Y-%m-%d') }}" required><br><br>
 
+        <div class="mb-3">
+        <label for="categoria">Categoria (Módulo):</label>
+        <input type="text" name="categoria" list="sugestoes_categorias" class="form-control"
+            placeholder="Selecione ou digite uma nova..." required>
+        
+        <datalist id="sugestoes_categorias">
+            {% for cat in categorias_db %}
+            <option value="{{ cat }}">
+                {% endfor %}
+        
+            <option value="Geral">
+            <option value="Segurança">
+            <option value="Sincronização">
+        </datalist>
+        </div>
+
         <button type="submit" class="btn">Salvar Alterações</button>
         <a href="{{ url_for('admin.pagina_admin') }}" style="margin-left: 10px;">Cancelar</a>
     </form>

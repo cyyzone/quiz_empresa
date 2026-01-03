@@ -46,6 +46,7 @@ class Pergunta(db.Model):
     data_liberacao = db.Column(db.Date, nullable=False, index=True)
     tempo_limite = db.Column(db.Integer, nullable=True)
     imagem_pergunta = db.Column(db.String(300), nullable=True)
+    categoria = db.Column(db.String(50), nullable=True, default='Geral', index=True)
     para_todos_setores = db.Column(db.Boolean, default=False, nullable=False)
     departamentos = db.relationship('Departamento', secondary=pergunta_departamento_association, lazy='subquery',
         backref=db.backref('perguntas', lazy=True))

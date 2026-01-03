@@ -42,8 +42,8 @@
     <hr>
 
     <div class="actions">
-        <a href="{{ url_for('user.pagina_quiz') }}" class="btn">🚀 Quiz Rápido 🚀</a>
-        <a href="{{ url_for('user.pagina_atividades') }}" class="btn">📝 Atividades Discursivas 📝</a>
+        <a href="{{ url_for('user.selecionar_tema', tipo_origem='quiz') }}" class="btn">🚀 Quiz Rápido 🚀</a>
+        <a href="{{ url_for('user.selecionar_tema', tipo_origem='atividades') }}" class="btn">📝 Atividades Discursivas 📝</a>
         <a href="{{ url_for('user.minhas_respostas') }}" class="btn btn-secondary" style="background-color: #ffc107; color: #333;">📋 Ver Minhas Respostas 📋</a>
         <a href="{{ url_for('user.pagina_ranking') }}" class="btn btn-secondary">🏆 Ver Ranking 🏆</a>
     </div>

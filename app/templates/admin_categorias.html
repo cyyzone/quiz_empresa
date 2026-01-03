@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+
+{% block title %}Gerenciar Categorias{% endblock %}
+
+{% block content %}
+<div class="dashboard-container" style="max-width: 800px;">
+    <h1>📂 Gestão de Categorias</h1>
+    <p>Aqui você vê quantas perguntas existem em cada módulo e pode corrigir nomes.</p>
+    
+    <div style="text-align: right; margin-bottom: 20px;">
+        <a href="{{ url_for('admin.pagina_admin') }}" class="btn btn-secondary">Voltar</a>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden;">
+        <thead style="background-color: #007bff; color: white;">
+            <tr>
+                <th style="padding: 12px; text-align: left;">Nome da Categoria</th>
+                <th style="padding: 12px; text-align: center;">Qtd. Perguntas</th>
+                <th style="padding: 12px; text-align: center;">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for nome, quantidade in estatisticas %}
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px;">
+                    <strong>{{ nome }}</strong>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    <span style="background: #e9ecef; padding: 4px 10px; border-radius: 20px; font-weight: bold;">
+                        {{ quantidade }}
+                    </span>
+                </td>
+                <td style="padding: 12px; text-align: center;">
+                    <button onclick="abrirModalRenomear('{{ nome }}')" class="btn btn-warning" style="margin-right: 5px;">
+                        ✏️ Renomear
+                    </button>
+                
+                    <button onclick="confirmarExclusao('{{ nome }}', {{ quantidade }})" class="btn btn-danger">
+                        🗑️ Excluir
+                    </button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" style="padding: 20px; text-align: center;">Nenhuma categoria encontrada.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div id="modalRenomear" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center;">
+    <div style="background:white; padding:30px; border-radius:10px; width:400px; text-align:left;">
+        <h3>Renomear Categoria</h3>
+        <p>Isso mudará a categoria de <b>todas</b> as perguntas associadas.</p>
+        
+        <form action="{{ url_for('admin.renomear_categoria') }}" method="post">
+            <input type="hidden" name="nome_antigo" id="inputNomeAntigo">
+            
+            <label>Novo Nome:</label>
+            <input type="text" name="novo_nome" id="inputNovoNome" class="form-control" required style="width: 100%; margin-bottom: 20px;">
+            
+            <div style="text-align: right;">
+                <button type="button" onclick="fecharModal()" class="btn btn-secondary">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<form id="formExcluir" action="{{ url_for('admin.excluir_categoria') }}" method="post" style="display: none;">
+    <input type="hidden" name="nome_categoria" id="inputExcluirNome">
+</form>
+
+<script>
+    // Função para abrir o modal de renomear
+    function abrirModalRenomear(nomeAtual) {
+        document.getElementById('inputNomeAntigo').value = nomeAtual;
+        document.getElementById('inputNovoNome').value = nomeAtual; // Já vem preenchido para facilitar
+        document.getElementById('modalRenomear').style.display = 'flex';
+    }
+
+    // Função para fechar o modal
+    function fecharModal() {
+        document.getElementById('modalRenomear').style.display = 'none';
+    }
+
+    // NOVA FUNÇÃO DE EXCLUIR (Versão Segura)
+    function confirmarExclusao(nome, qtd) {
+        if (confirm(`Você quer remover a categoria "${nome}"?\n\nAs ${qtd} perguntas NÃO serão apagadas.\nElas serão movidas automaticamente para a categoria "Geral".\n\nDeseja continuar?`)) {
+            // Preenche o formulário invisível e envia
+            document.getElementById('inputExcluirNome').value = nome;
+            document.getElementById('formExcluir').submit();
+        }
+    }
+    
+    // Fecha o modal se clicar fora dele (Opcional, mas melhora a usabilidade)
+    window.onclick = function(event) {
+        const modal = document.getElementById('modalRenomear');
+        if (event.target == modal) {
+            fecharModal();
+        }
+    }
+</script>
+{% endblock %}

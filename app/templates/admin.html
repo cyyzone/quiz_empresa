@@ -12,7 +12,6 @@
             • Gerenciar Usuários: Adicione, edite ou exclua colaboradores.
             • Gerenciar Admins: Adicione outros administradores.">?</button>
     </h1>
-
     {% if contagem_pendentes > 0 %}
     <a href="{{ url_for('admin.pagina_correcoes') }}" style="text-decoration: none;">
         <div class="alert" style="background-color: #fff3cd; color: #856404; border-color: #ffeeba; cursor: pointer;">
@@ -46,6 +45,10 @@
 
     <a href="{{ url_for('admin.pagina_admin_perguntas') }}" class="accordion-trigger" style="display: block; text-decoration: none; color: inherit; margin-top: 20px; text-align: left; position: relative;">
         Gerenciar Perguntas ➡️
+    </a>
+
+    <a href="{{ url_for('admin.gerenciar_categorias') }}" class="accordion-trigger" style="display: block; text-decoration: none; color: inherit; margin-top: 10px; text-align: left; position: relative;">
+        📂 Gerenciar Categorias ➡️
     </a>
 
     <button class="accordion-trigger" id="accordion-setores">Gerenciar Setores</button>

@@ -2,15 +2,15 @@ from run import app
 from app.extensions import db 
 from sqlalchemy import text
 
-# Script para adicionar a coluna 'explicacao' sem resetar o banco
+# Script para adicionar a coluna 'categoria' na tabela 'pergunta'
 with app.app_context():
-    print("Iniciando migração do banco de dados...")
+    print("Iniciando atualização do banco de dados...")
     try:
         with db.engine.connect() as conn:
-            # Comando SQL compatível com SQLite e PostgreSQL
-            conn.execute(text("ALTER TABLE pergunta ADD COLUMN explicacao TEXT"))
+            # Adiciona a coluna com um valor padrão 'Geral' para as perguntas antigas não ficarem vazias
+            conn.execute(text("ALTER TABLE pergunta ADD COLUMN categoria VARCHAR(50) DEFAULT 'Geral'"))
             conn.commit()
-        print("SUCESSO: Coluna 'explicacao' criada na tabela 'pergunta'!")
+        print("SUCESSO: Coluna 'categoria' criada na tabela 'pergunta'!")
     except Exception as e:
-        # Se der erro, geralmente é porque a coluna já existe
-        print(f"AVISO: Não foi possível criar a coluna (ela provavelmente já existe). Detalhes: {e}")
+        # Se cair aqui, é porque provavelmente a coluna já existe ou houve outro erro
+        print(f"AVISO ou ERRO: {e}")

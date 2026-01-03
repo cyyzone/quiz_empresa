@@ -47,8 +47,11 @@ def dashboard():
                            contagem_atividades=contagem_atividades_pendentes,
                            contagem_feedbacks=contagem_novos_feedbacks)
 
+# app/routes/user.py
+
 @user_bp.route('/quiz')
-def pagina_quiz():
+@user_bp.route('/quiz/<categoria>') # Nova rota para aceitar a categoria
+def pagina_quiz(categoria=None):
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     usuario_id = session['usuario_id']
     usuario = Usuario.query.get(usuario_id)
@@ -56,21 +59,32 @@ def pagina_quiz():
     
     sq_respondidas = db.session.query(Resposta.pergunta_id).filter(Resposta.usuario_id == usuario_id).subquery()
 
-    proxima_pergunta = Pergunta.query.filter(
+    # Monta a busca básica
+    query = Pergunta.query.filter(
         Pergunta.tipo != 'discursiva',
         Pergunta.data_liberacao <= hoje,
         ~Pergunta.id.in_(sq_respondidas),
         or_(Pergunta.para_todos_setores == True, Pergunta.departamentos.any(Departamento.id == usuario.departamento_id))
-    ).order_by(Pergunta.data_liberacao).first()
+    )
+
+    if categoria:
+        query = query.filter(Pergunta.categoria == categoria)
+
+    proxima_pergunta = query.order_by(Pergunta.data_liberacao).first()
 
     if proxima_pergunta:
-        return render_template('quiz.html', pergunta=proxima_pergunta)
+        # Passamos 'categoria_atual' para o template manter o foco nela
+        return render_template('quiz.html', pergunta=proxima_pergunta, categoria_atual=categoria)
     else:
-        flash('Parabéns, você respondeu todas as perguntas de quiz rápido disponíveis para o seu setor!', 'success')
+        msg = f'Você finalizou o módulo {categoria}!' if categoria else 'Parabéns, todas as perguntas respondidas!'
+        flash(msg, 'success')
         return redirect(url_for('user.dashboard'))
 
+# app/routes/user.py
+
 @user_bp.route('/atividades')
-def pagina_atividades():
+@user_bp.route('/atividades/<categoria>') # Nova rota aqui também
+def pagina_atividades(categoria=None):
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     
     hoje = (datetime.utcnow() - timedelta(hours=3)).date()
@@ -81,16 +95,25 @@ def pagina_atividades():
 
     sq_respondidas = db.session.query(Resposta.pergunta_id).filter(Resposta.usuario_id == usuario_id).subquery()
 
+    # Busca básica
     query_atividades = Pergunta.query.filter(
         Pergunta.tipo == 'discursiva',
         Pergunta.data_liberacao <= hoje,
         ~Pergunta.id.in_(sq_respondidas),
         or_(Pergunta.para_todos_setores == True, Pergunta.departamentos.any(Departamento.id == usuario.departamento_id))
-    ).order_by(Pergunta.data_liberacao.desc())
+    )
 
+    if categoria:
+        query_atividades = query_atividades.filter(Pergunta.categoria == categoria)
+
+    # Ordena e Pagina
+    query_atividades = query_atividades.order_by(Pergunta.data_liberacao.desc())
     atividades_pagination = query_atividades.paginate(page=page, per_page=per_page, error_out=False)
 
-    return render_template('atividades.html', atividades=atividades_pagination, respostas_dadas={})
+    return render_template('atividades.html', 
+                           atividades=atividades_pagination, 
+                           respostas_dadas={},
+                           categoria_atual=categoria) # Importante passar isso!
 
 @user_bp.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
 def responder_atividade(pergunta_id):
@@ -130,6 +153,13 @@ def processa_resposta():
     
     pergunta_id = request.form['pergunta_id']
     resposta_usuario = request.form.get('resposta', '')
+    
+    # --- NOVO: Captura a categoria que veio oculta do formulário ---
+    categoria_recebida = request.form.get('categoria')
+    if categoria_recebida == '': 
+        categoria_recebida = None
+    # ---------------------------------------------------------------
+
     pergunta = Pergunta.query.get(pergunta_id)
     pontos = 0
     resultado = ''
@@ -156,7 +186,12 @@ def processa_resposta():
     db.session.add(nova_resposta)
     db.session.commit()
     
-    return render_template('feedback_quiz.html', resultado=resultado, pontos=pontos, pergunta=pergunta)
+    # --- AJUSTE: Passamos a 'categoria_atual' para o template ---
+    return render_template('feedback_quiz.html', 
+                           resultado=resultado, 
+                           pontos=pontos, 
+                           pergunta=pergunta,
+                           categoria_atual=categoria_recebida)
 
 @user_bp.route('/minhas-respostas')
 def minhas_respostas():
@@ -238,3 +273,52 @@ def pagina_ranking_detalhe(departamento_id):
         ranking_final.append({'nome': membro.nome, 'pontos_totais': membro.pontos_totais, 'total_respostas': total_respostas, 'total_acertos': total_acertos, 'percentual_acertos': round(percentual, 1)})
     ranking_final.sort(key=lambda x: x['nome'])
     return render_template('ranking_detalhe.html', departamento=departamento, ranking=ranking_final)
+
+# app/routes/user.py
+
+# app/routes/user.py
+
+# app/routes/user.py
+
+@user_bp.route('/temas/<tipo_origem>')
+def selecionar_tema(tipo_origem):
+    if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
+    
+    usuario_id = session['usuario_id']
+    usuario = Usuario.query.get(usuario_id)
+    hoje = (datetime.utcnow() - timedelta(hours=3)).date()
+    
+    tipo_filtro = 'discursiva' if tipo_origem == 'atividades' else 'multipla_escolha'
+    
+    # 1. Busca as categorias cruas do banco
+    query = db.session.query(
+        Pergunta.categoria, 
+        func.count(Pergunta.id)
+    ).filter(
+        Pergunta.tipo == tipo_filtro if tipo_origem == 'atividades' else Pergunta.tipo != 'discursiva',
+        Pergunta.data_liberacao <= hoje,
+        or_(Pergunta.para_todos_setores == True, Pergunta.departamentos.any(Departamento.id == usuario.departamento_id))
+    ).group_by(Pergunta.categoria).all()
+    
+    # 2. Processamento Inteligente (Agrupa nomes parecidos)
+    categorias_processadas = {}
+    
+    for nome, qtd in query:
+        if nome: # Ignora vazios
+            # Padroniza: Remove espaços extras e deixa tudo Capitalizado
+            nome_limpo = nome.strip().title() 
+            
+            if nome_limpo in categorias_processadas:
+                categorias_processadas[nome_limpo] += qtd
+            else:
+                categorias_processadas[nome_limpo] = qtd
+    
+    # Transforma de volta em lista para o template
+    lista_categorias = [{'nome': k, 'qtd': v} for k, v in categorias_processadas.items()]
+
+    # Ordena alfabeticamente
+    lista_categorias = sorted(lista_categorias, key=lambda x: x['nome'])
+
+    return render_template('selecao_temas.html', 
+                           categorias=lista_categorias, 
+                           origem=tipo_origem)

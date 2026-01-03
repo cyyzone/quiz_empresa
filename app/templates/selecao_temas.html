@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Escolha um Módulo{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 800px; text-align: center; margin-top: 40px;">
+
+    <h2>📚 Módulos de Estudo</h2>
+    <p>Escolha um tópico para iniciar:</p>
+    <hr>
+
+    <div class="row" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;">
+
+        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades') }}"
+            class="card-modulo" style="text-decoration: none; color: inherit;">
+            <div style="background: #6c757d; color: white; padding: 20px; border-radius: 10px; width: 200px;">
+                <h3>🔀 Geral</h3>
+                <p>Perguntas misturadas</p>
+            </div>
+        </a>
+
+        {% for cat in categorias %}
+        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades', categoria=cat.nome) }}"
+            class="card-modulo" style="text-decoration: none; color: inherit;">
+            <div
+                style="background: #007bff; color: white; padding: 20px; border-radius: 10px; width: 200px; position: relative;">
+
+                <span
+                    style="position: absolute; top: -10px; right: -10px; background: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white;">
+                    {{ cat.qtd }}
+                </span>
+
+                <h3>📂 {{ cat.nome }}</h3>
+                <p>Iniciar módulo</p>
+            </div>
+        </a>
+        {% endfor %}
+
+    </div>
+
+    <br><br>
+    <a href="{{ url_for('user.dashboard') }}" class="btn btn-outline-secondary">Voltar ao Dashboard</a>
+</div>
+
+<style>
+    .card-modulo:hover div {
+        transform: scale(1.05);
+        background-color: #0056b3 !important;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
