@@ -11,23 +11,40 @@
     <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 1000px; margin: 0 auto;">
 
         {% for cat in categorias %}
-        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades', categoria=cat.nome) }}" 
-           class="card-modulo" style="text-decoration: none; color: inherit; transition: transform 0.2s;">
-            
-            <div style="background: #007bff; color: white; padding: 20px; border-radius: 10px; width: 200px; min-height: 120px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                
-                <span style="position: absolute; top: -10px; right: -10px; background: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; font-size: 0.9em;">
-                    {{ cat.qtd }}
+        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades', categoria=cat.nome) }}"
+            class="card-modulo" style="text-decoration: none; color: inherit;">
+            <div
+                style="background: #007bff; color: white; padding: 20px; border-radius: 10px; width: 200px; position: relative;">
+        
+                {% if cat.restantes > 0 %}
+                <span
+                    style="position: absolute; top: -10px; right: -10px; background: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    {{ cat.restantes }}
                 </span>
-
-                <h3 style="margin: 0 0 10px 0; font-size: 1.2em;">📂 {{ cat.nome }}</h3>
-                <p style="margin: 0; font-size: 0.9em; opacity: 0.9;">Iniciar módulo</p>
+                {% else %}
+                <span
+                    style="position: absolute; top: -10px; right: -10px; background: #28a745; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    ✓
+                </span>
+                {% endif %}
+        
+                <h3>📂 {{ cat.nome }}</h3>
+        
+                <p style="margin-bottom: 5px; font-size: 0.9em; opacity: 0.9;">
+                    {% if cat.restantes == 0 %}
+                    Módulo Concluído!
+                    {% else %}
+                    Iniciar módulo
+                    {% endif %}
+                </p>
+        
+                <small
+                    style="display: block; background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 10px; width: fit-content; margin: 0 auto;">
+                    {{ cat.respondidas }} / {{ cat.total }}
+                </small>
+        
             </div>
         </a>
-        {% else %}
-        <div style="padding: 40px; color: #777;">
-            <p>Nenhum módulo com perguntas disponíveis para hoje.</p>
-        </div>
         {% endfor %}
         
     </div>

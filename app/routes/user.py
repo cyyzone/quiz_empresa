@@ -307,31 +307,59 @@ def selecionar_tema(tipo_origem):
     
     tipo_filtro = 'discursiva' if tipo_origem == 'atividades' else 'multipla_escolha'
     
-    # 1. Busca as categorias cruas do banco
-    query = db.session.query(
-        Pergunta.categoria, 
-        func.count(Pergunta.id)
-    ).filter(
+    # Filtros Comuns (Para não repetir código)
+    filtros_base = [
         Pergunta.tipo == tipo_filtro if tipo_origem == 'atividades' else Pergunta.tipo != 'discursiva',
         Pergunta.data_liberacao <= hoje,
         or_(Pergunta.para_todos_setores == True, Pergunta.departamentos.any(Departamento.id == usuario.departamento_id))
+    ]
+
+    # 1. Consulta TOTAL de perguntas por categoria
+    query_total = db.session.query(
+        Pergunta.categoria, 
+        func.count(Pergunta.id)
+    ).filter(*filtros_base).group_by(Pergunta.categoria).all()
+
+    # 2. Consulta RESPONDIDAS pelo usuário por categoria
+    # Primeiro, pega os IDs que o usuário já respondeu
+    sq_respondidas = db.session.query(Resposta.pergunta_id).filter(Resposta.usuario_id == usuario_id).subquery()
+    
+    query_respondidas = db.session.query(
+        Pergunta.categoria,
+        func.count(Pergunta.id)
+    ).filter(
+        *filtros_base,
+        Pergunta.id.in_(sq_respondidas) # <--- Filtra só as que ele já fez
     ).group_by(Pergunta.categoria).all()
     
-    # 2. Processamento Inteligente (Agrupa nomes parecidos)
-    categorias_processadas = {}
-    
-    for nome, qtd in query:
-        if nome: # Ignora vazios
-            # Padroniza: Remove espaços extras e deixa tudo Capitalizado
-            nome_limpo = nome.strip().title() 
-            
-            if nome_limpo in categorias_processadas:
-                categorias_processadas[nome_limpo] += qtd
-            else:
-                categorias_processadas[nome_limpo] = qtd
-    
-    # Transforma de volta em lista para o template
-    lista_categorias = [{'nome': k, 'qtd': v} for k, v in categorias_processadas.items()]
+    # 3. Processamento Inteligente (Mescla Total vs Respondidas)
+    dados_categorias = {}
+
+    # Passo A: Preenche os totais
+    for nome, qtd in query_total:
+        if nome: 
+            nome_limpo = nome.strip().title()
+            if nome_limpo not in dados_categorias:
+                dados_categorias[nome_limpo] = {'total': 0, 'respondidas': 0}
+            dados_categorias[nome_limpo]['total'] += qtd
+
+    # Passo B: Preenche as respondidas
+    for nome, qtd in query_respondidas:
+        if nome:
+            nome_limpo = nome.strip().title()
+            if nome_limpo in dados_categorias:
+                dados_categorias[nome_limpo]['respondidas'] += qtd
+
+    # 4. Monta a lista final com o cálculo de restantes
+    lista_categorias = []
+    for nome, dados in dados_categorias.items():
+        restantes = dados['total'] - dados['respondidas']
+        lista_categorias.append({
+            'nome': nome, 
+            'total': dados['total'],
+            'respondidas': dados['respondidas'],
+            'restantes': restantes
+        })
 
     # Ordena alfabeticamente
     lista_categorias = sorted(lista_categorias, key=lambda x: x['nome'])
