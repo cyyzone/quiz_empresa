@@ -68,7 +68,12 @@ def pagina_quiz(categoria=None):
     )
 
     if categoria:
-        query = query.filter(Pergunta.categoria == categoria)
+        if categoria == "Sem Classificação":
+            # Busca perguntas onde a categoria é NULL ou Vazia
+            query = query.filter(or_(Pergunta.categoria.is_(None), Pergunta.categoria == ''))
+        else:
+            # Busca normal pelo nome exato
+            query = query.filter(Pergunta.categoria == categoria)
 
     proxima_pergunta = query.order_by(Pergunta.data_liberacao).first()
 
@@ -104,7 +109,10 @@ def pagina_atividades(categoria=None):
     )
 
     if categoria:
-        query_atividades = query_atividades.filter(Pergunta.categoria == categoria)
+        if categoria == "Sem Classificação":
+            query_atividades = query_atividades.filter(or_(Pergunta.categoria.is_(None), Pergunta.categoria == ''))
+        else:
+            query_atividades = query_atividades.filter(Pergunta.categoria == categoria)
 
     # Ordena e Pagina
     query_atividades = query_atividades.order_by(Pergunta.data_liberacao.desc())

@@ -1,52 +1,41 @@
 {% extends 'base.html' %}
 
-{% block title %}Escolha um Módulo{% endblock %}
+{% block title %}Seleção de Módulos{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 800px; text-align: center; margin-top: 40px;">
+<div class="dashboard-container" style="text-align: center;">
+    
+    <h1 style="margin-bottom: 10px;">📚 Módulos de Estudo</h1>
+    <p style="color: #666; margin-bottom: 30px;">Escolha um tópico para iniciar:</p>
 
-    <h2>📚 Módulos de Estudo</h2>
-    <p>Escolha um tópico para iniciar:</p>
-    <hr>
-
-    <div class="row" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;">
-
-        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades') }}"
-            class="card-modulo" style="text-decoration: none; color: inherit;">
-            <div style="background: #6c757d; color: white; padding: 20px; border-radius: 10px; width: 200px;">
-                <h3>🔀 Geral</h3>
-                <p>Perguntas misturadas</p>
-            </div>
-        </a>
+    <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; max-width: 1000px; margin: 0 auto;">
 
         {% for cat in categorias %}
-        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades', categoria=cat.nome) }}"
-            class="card-modulo" style="text-decoration: none; color: inherit;">
-            <div
-                style="background: #007bff; color: white; padding: 20px; border-radius: 10px; width: 200px; position: relative;">
-
-                <span
-                    style="position: absolute; top: -10px; right: -10px; background: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white;">
+        <a href="{{ url_for('user.pagina_quiz' if origem == 'quiz' else 'user.pagina_atividades', categoria=cat.nome) }}" 
+           class="card-modulo" style="text-decoration: none; color: inherit; transition: transform 0.2s;">
+            
+            <div style="background: #007bff; color: white; padding: 20px; border-radius: 10px; width: 200px; min-height: 120px; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                
+                <span style="position: absolute; top: -10px; right: -10px; background: #dc3545; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; font-size: 0.9em;">
                     {{ cat.qtd }}
                 </span>
 
-                <h3>📂 {{ cat.nome }}</h3>
-                <p>Iniciar módulo</p>
+                <h3 style="margin: 0 0 10px 0; font-size: 1.2em;">📂 {{ cat.nome }}</h3>
+                <p style="margin: 0; font-size: 0.9em; opacity: 0.9;">Iniciar módulo</p>
             </div>
         </a>
+        {% else %}
+        <div style="padding: 40px; color: #777;">
+            <p>Nenhum módulo com perguntas disponíveis para hoje.</p>
+        </div>
         {% endfor %}
-
+        
     </div>
 
     <br><br>
-    <a href="{{ url_for('user.dashboard') }}" class="btn btn-outline-secondary">Voltar ao Dashboard</a>
-</div>
+    <a href="{{ url_for('user.dashboard') }}" class="btn btn-secondary" style="background-color: #6c757d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+        Voltar ao Dashboard
+    </a>
 
-<style>
-    .card-modulo:hover div {
-        transform: scale(1.05);
-        background-color: #0056b3 !important;
-        cursor: pointer;
-    }
-</style>
+</div>
 {% endblock %}
