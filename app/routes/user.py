@@ -47,10 +47,8 @@ def dashboard():
                            contagem_atividades=contagem_atividades_pendentes,
                            contagem_feedbacks=contagem_novos_feedbacks)
 
-# app/routes/user.py
-
 @user_bp.route('/quiz')
-@user_bp.route('/quiz/<categoria>') # Nova rota para aceitar a categoria
+@user_bp.route('/quiz/<categoria>')
 def pagina_quiz(categoria=None):
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     usuario_id = session['usuario_id']
@@ -68,27 +66,31 @@ def pagina_quiz(categoria=None):
     )
 
     if categoria:
+        # --- CORREÇÃO AQUI ---
+        # Verifica se é "Sem Classificação" para tratar nulos OU texto,
+        # e usa func.lower() para garantir que "duvidas_atividades" encontre "Duvidas_Atividades"
         if categoria == "Sem Classificação":
-            # Busca perguntas onde a categoria é NULL ou Vazia
-            query = query.filter(or_(Pergunta.categoria.is_(None), Pergunta.categoria == ''))
+             query = query.filter(or_(
+                 Pergunta.categoria.is_(None), 
+                 Pergunta.categoria == '',
+                 func.lower(Pergunta.categoria) == 'sem classificação' # Caso esteja escrito no banco
+             ))
         else:
-            # Busca normal pelo nome exato
-            query = query.filter(Pergunta.categoria == categoria)
+             # Compara transformando tudo em minúsculo
+             query = query.filter(func.lower(Pergunta.categoria) == categoria.lower())
+        # ---------------------
 
     proxima_pergunta = query.order_by(Pergunta.data_liberacao).first()
 
     if proxima_pergunta:
-        # Passamos 'categoria_atual' para o template manter o foco nela
         return render_template('quiz.html', pergunta=proxima_pergunta, categoria_atual=categoria)
     else:
         msg = f'Você finalizou o módulo {categoria}!' if categoria else 'Parabéns, todas as perguntas respondidas!'
         flash(msg, 'success')
         return redirect(url_for('user.dashboard'))
 
-# app/routes/user.py
-
 @user_bp.route('/atividades')
-@user_bp.route('/atividades/<categoria>') # Nova rota aqui também
+@user_bp.route('/atividades/<categoria>')
 def pagina_atividades(categoria=None):
     if 'usuario_id' not in session: return redirect(url_for('auth.pagina_login'))
     
@@ -109,10 +111,17 @@ def pagina_atividades(categoria=None):
     )
 
     if categoria:
+        # --- CORREÇÃO AQUI ---
         if categoria == "Sem Classificação":
-            query_atividades = query_atividades.filter(or_(Pergunta.categoria.is_(None), Pergunta.categoria == ''))
+            query_atividades = query_atividades.filter(or_(
+                Pergunta.categoria.is_(None), 
+                Pergunta.categoria == '',
+                func.lower(Pergunta.categoria) == 'sem classificação'
+            ))
         else:
-            query_atividades = query_atividades.filter(Pergunta.categoria == categoria)
+            # Compara transformando tudo em minúsculo
+            query_atividades = query_atividades.filter(func.lower(Pergunta.categoria) == categoria.lower())
+        # ---------------------
 
     # Ordena e Pagina
     query_atividades = query_atividades.order_by(Pergunta.data_liberacao.desc())
@@ -121,7 +130,7 @@ def pagina_atividades(categoria=None):
     return render_template('atividades.html', 
                            atividades=atividades_pagination, 
                            respostas_dadas={},
-                           categoria_atual=categoria) # Importante passar isso!
+                           categoria_atual=categoria)
 
 @user_bp.route('/atividade/<int:pergunta_id>', methods=['GET', 'POST'])
 def responder_atividade(pergunta_id):
