@@ -39,7 +39,7 @@ Clone o repositório e instale as dependências:
 git clone https://teu-repositorio/quiz-empresa.git
 cd quiz-empresa
 pip install -r requirements.txt
-
+```
 ### 2. Variáveis de Ambiente
 O projeto utiliza o ficheiro `config.py`. Podes definir as variáveis de ambiente ou editar os valores padrão no ficheiro `config.py` (para testes locais).
 As principais variáveis são:
