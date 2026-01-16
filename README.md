@@ -69,7 +69,7 @@ Após a configuração, inicie o servidor:
 python run.py
 
 Aceda ao navegador em: `http://127.0.0.1:5000`
-
+```
 ## 📂 Estrutura do Projeto
 * `app/`: Código fonte (Models, Routes, Templates).
     * `routes/admin.py`: Painel administrativo.
